@@ -136,7 +136,7 @@ ValidationResult PdfFontSizeExtractor::extract(
                 line.text += ' ';
             }
             line.text += word;
-            line.word_count = countWords(line.text);
+            line.word_count += countWords(word);
 
             if (!text_box.has_font_info()) {
                 continue;
