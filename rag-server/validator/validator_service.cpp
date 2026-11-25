@@ -167,7 +167,10 @@ ValidationResult ValidatorService::extractAndValidateHeadingFontSizes(
             }
 
             // Normalize insignificant floating-point noise from PDF font data.
-            const double normalized_size = std::round(font_size * 100.0) / 100.0;
+            const double precision_scale =
+                std::pow(10.0, config_.font_size_precision_decimal_places);
+            const double normalized_size =
+                std::round(font_size * precision_scale) / precision_scale;
             ++font_size_frequency[normalized_size];
         }
     }
