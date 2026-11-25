@@ -9,11 +9,11 @@ class FontSizeValidator {
 public:
     explicit FontSizeValidator(ValidatorConfig config = {});
 
-    ValidationResult validate(const ExtractedPdfData& extracted_data) const;
+    ValidationReport validate(const ExtractedPdfData& extracted_data) const;
 
 private:
     ValidatorConfig config_;
-    ValidationResult validateConfiguration() const;
+    ValidationReport validateConfiguration() const;
 };
 
 } // namespace rag
