@@ -1,7 +1,7 @@
 # PDF Heading Validator
 
-A small C++17 service that checks PDF heading font sizes against the configured
-heading scale.
+A small C++17 service that parses PDF text metadata and validates heading font
+sizes and heading-level traversal.
 
 ## Default heading sizes
 
@@ -14,13 +14,25 @@ heading scale.
 | H5 | 14 pt |
 | H6 | 12 pt |
 
-The accepted deviation is +/- 0.5 pt.
+The accepted font-size deviation is +/- 0.5 pt.
+
+## Structure
+
+- `validator_service`: accepts PDF bytes or a file path, extracts font metadata,
+  and coordinates the validation sequence.
+- `font_size_validator`: validates configuration and checks each detected
+  heading level against its configured font size.
+- `heading_level_validator`: checks the order of heading levels.
+- `validation_result.hpp`: shared result type used by all validators.
+
+The service runs the checks sequentially: font-size validation first, followed
+by heading-level traversal validation. The individual validators can also be
+used independently.
 
 ## Configuration
 
-All validator tuning values live in `config/validator_config.hpp` as a
-`rag::ValidatorConfig` struct. Defaults are provided, but callers can override
-any setting at construction time:
+All tuning values live in `config/validator_config.hpp` as
+`rag::ValidatorConfig`. Defaults can be overridden at construction time:
 
 ```cpp
 #include "validator_service.hpp"
@@ -38,56 +50,20 @@ config.font_size_precision_decimal_places = 2;
 rag::ValidatorService validator(config);
 ```
 
-Invalid configuration values are rejected with a reason before PDF validation.
-Missing heading levels are allowed. The configuration object is copied into the
-service, so each service instance has its own settings.
+Invalid configuration values are rejected before PDF validation. Missing
+heading levels are allowed. Each validator receives its own copy of the
+configuration values it needs.
 
-## Configuration
+## Heading-level traversal rule
 
-All validator tuning values live in `config/validator_config.hpp` as a
-`rag::ValidatorConfig` struct. Defaults are provided, but callers can override
-any setting at construction time:
+Adjacent headings may stay at the same level or move exactly one level up or
+down. For example, H1 -> H2 and H2 -> H1 are valid; H1 -> H3 is invalid.
+Heading levels must be in the H1-H6 range.
 
 ```cpp
-#include "validator_service.hpp"
-
-rag::ValidatorConfig config;
-config.heading_font_sizes = {
-    {1, 26.0},
-    {2, 21.0},
-    {3, 17.0}
-};
-config.heading_font_size_tolerance_points = 0.75;
-config.body_font_size_tolerance_points = 0.4;
-config.font_size_precision_decimal_places = 2;
-
-rag::ValidatorService validator(config);
+rag::HeadingLevelValidator traversal_validator;
+const auto result = traversal_validator.validate({1, 2, 2, 3, 2, 1});
 ```
-
-Invalid configuration values are rejected with a reason before PDF validation.
-Missing heading levels are allowed. The configuration object is copied into the
-service, so each service instance has its own settings.
-
-## Dependency
-
-The PDF parser is Poppler's C++ library (version 0.89 or newer).
-
-On Debian/Ubuntu:
-
-```bash
-sudo apt-get install cmake pkg-config libpoppler-cpp-dev
-```
-
-## Build
-
-Run from this directory:
-
-```bash
-cmake -S . -B build
-cmake --build build
-```
-
-This builds the `rag_validator` library.
 
 ## Usage
 
@@ -108,42 +84,36 @@ if (!result.is_valid) {
 Or validate a PDF stored on disk:
 
 ```cpp
-const rag::ValidationResult result =
-    validator.validatePdfFile("document.pdf");
+const auto result = validator.validatePdfFile("document.pdf");
 ```
 
-The existing `hasConsistentHeadingFontSizes` method remains available when
-another component has already extracted a map of heading levels to font sizes.
+The service also retains the `hasConsistentHeadingFontSizes` and
+`hasValidHeadingLevelTraversal` delegate methods for callers using the
+previous interface.
 
-## Heading-level traversal
+## Dependency and build
 
-The service also exposes `hasValidHeadingLevelTraversal`, which accepts heading
-levels in document order:
+The PDF parser is Poppler's C++ library (version 0.89 or newer).
 
-```cpp
-const auto result = validator.hasValidHeadingLevelTraversal(
-    {1, 2, 2, 3, 2, 1}
-);
+On Debian/Ubuntu:
+
+```bash
+sudo apt-get install cmake pkg-config libpoppler-cpp-dev
+cmake -S . -B build
+cmake --build build
 ```
 
-A transition may remain at the same level or move exactly one level up or down.
-For example, H1 -> H2 and H2 -> H1 are valid; H1 -> H3 is invalid. Levels must
-be in the H1-H6 range. PDF validation applies this check to the extracted
-heading-level sequence as well.
+## Extraction limitations
 
-## Current extraction behavior and limitations
+Poppler supplies text boxes and font sizes, not guaranteed semantic headings.
+The current heuristic treats the most frequent font size as body text and
+larger sizes matching the configured scale as heading candidates. Large
+non-heading text (such as figure titles) may be misclassified, and a heading
+that uses the body font size cannot be distinguished by size alone. Scanned
+PDFs or PDFs containing only outlined text have no extractable font metadata
+and are rejected.
 
-Poppler extracts text words and their font sizes. The current first-pass
-heuristic treats the most frequently occurring font size as body text and
-larger font sizes as heading candidates. Each candidate must match one of the
-configured H1-H6 sizes within the tolerance.
-
-This is not semantic heading recognition: PDFs without tagged headings can be
-ambiguous, and large non-heading text (for example, figure titles) may be
-treated as a heading candidate. A heading that uses the same size as body text
-cannot be distinguished by font size alone. Scanned PDFs or PDFs containing
-only outlined text do not expose extractable font metadata and are rejected
-with an explanatory reason.
-
-A later iteration can improve heading identification using line layout,
-boldness, numbering patterns, and PDF structure tags where available.
+Text boxes are processed in Poppler's returned order; complex multi-column
+layouts may not correspond to a reader's intended document order. Future
+improvements could use line layout, boldness, numbering patterns, and PDF
+structure tags.
