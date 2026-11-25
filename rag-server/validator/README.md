@@ -16,6 +16,32 @@ heading scale.
 
 The accepted deviation is +/- 0.5 pt.
 
+## Configuration
+
+All validator tuning values live in `config/validator_config.hpp` as a
+`rag::ValidatorConfig` struct. Defaults are provided, but callers can override
+any setting at construction time:
+
+```cpp
+#include "validator_service.hpp"
+
+rag::ValidatorConfig config;
+config.heading_font_sizes = {
+    {1, 26.0},
+    {2, 21.0},
+    {3, 17.0}
+};
+config.heading_font_size_tolerance_points = 0.75;
+config.body_font_size_tolerance_points = 0.4;
+config.font_size_precision_decimal_places = 2;
+
+rag::ValidatorService validator(config);
+```
+
+Invalid configuration values are rejected with a reason before PDF validation.
+Missing heading levels are allowed. The configuration object is copied into the
+service, so each service instance has its own settings.
+
 ## Dependency
 
 The PDF parser is Poppler's C++ library (version 0.89 or newer).
