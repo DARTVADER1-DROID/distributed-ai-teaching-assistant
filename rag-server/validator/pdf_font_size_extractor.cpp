@@ -9,6 +9,7 @@
 #include <memory>
 #include <sstream>
 #include <string>
+#include <utility>
 
 namespace rag {
 namespace {
@@ -29,7 +30,6 @@ double verticalCenter(const poppler::rectf& bounds) {
 
 bool belongsToLine(
     const poppler::rectf& bounds,
-    const ExtractedPdfLine& line,
     double line_center,
     double line_height
 ) {
@@ -111,7 +111,6 @@ ValidationResult PdfFontSizeExtractor::extract(
                     static_cast<std::size_t>(page_index + 1) ||
                 !belongsToLine(
                     bounds,
-                    extracted_data.lines.back(),
                     current_line_center,
                     current_line_height
                 )) {
