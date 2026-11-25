@@ -1,9 +1,7 @@
 #pragma once
 
 #include "config/validator_config.hpp"
-#include "validation_result.hpp"
-
-#include <map>
+#include "pdf_font_size_extractor.hpp"
 
 namespace rag {
 
@@ -11,16 +9,11 @@ class FontSizeValidator {
 public:
     explicit FontSizeValidator(ValidatorConfig config = {});
 
-    ValidationResult validateConfiguration() const;
-
-    ValidationResult validate(
-        const std::map<int, double>& heading_font_sizes
-    ) const;
-
-    static const std::map<int, double>& defaultHeadingFontSizes();
+    ValidationResult validate(const ExtractedPdfData& extracted_data) const;
 
 private:
     ValidatorConfig config_;
+    ValidationResult validateConfiguration() const;
 };
 
 } // namespace rag
