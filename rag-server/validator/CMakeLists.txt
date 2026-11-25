@@ -10,6 +10,7 @@ add_library(rag_validator
     validator_service.cpp
     font_size_validator.cpp
     heading_level_validator.cpp
+    page_limit_validator.cpp
 )
 
 target_compile_features(rag_validator PUBLIC cxx_std_17)
