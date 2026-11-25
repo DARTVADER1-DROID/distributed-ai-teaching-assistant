@@ -228,12 +228,6 @@ ValidationReport FontSizeValidator::validate(
         });
     }
 
-    if (!paragraph_text_found && report.isValid()) {
-        report.addIssue({
-            "No paragraph/body-text lines could be identified for font-size validation."
-        });
-    }
-
     return report;
 }
 
