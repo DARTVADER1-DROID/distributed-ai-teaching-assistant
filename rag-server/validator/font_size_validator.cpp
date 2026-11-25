@@ -4,6 +4,7 @@
 #include <limits>
 #include <map>
 #include <sstream>
+#include <set>
 #include <string>
 #include <utility>
 
@@ -97,7 +98,12 @@ ValidationReport FontSizeValidator::validate(
     std::map<int, double> detected_heading_sizes;
 
     for (const auto& line : extracted_data.lines) {
-        for (const double font_size : line.font_sizes) {
+        // A text line may contain one text box per word; check each distinct
+        // font size once per line to avoid duplicate issues for the same rule break.
+        const std::set<double> line_font_sizes(
+            line.font_sizes.begin(), line.font_sizes.end()
+        );
+        for (const double font_size : line_font_sizes) {
             if (font_size <= extracted_data.body_font_size +
                     config_.body_font_size_tolerance_points) {
                 continue;
