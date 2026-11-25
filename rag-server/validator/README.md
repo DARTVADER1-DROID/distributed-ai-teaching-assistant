@@ -1,8 +1,8 @@
 # PDF Heading Validator
 
-A small C++17 service that extracts PDF text and font metadata once and runs
-independent heading validators against the shared extracted data. Every detected
-rule violation is collected into one report.
+A small C++17 service that accepts raw PDF bytes, extracts selectable text and
+font metadata, and runs independent heading validators. Every detected rule
+violation is collected into one report.
 
 ## Default heading sizes
 
@@ -19,15 +19,17 @@ The accepted font-size deviation is +/- 0.5 pt.
 
 ## Responsibilities
 
-- `PdfFontSizeExtractor`: parses the PDF once and returns `ExtractedPdfData`.
-  It stores each extracted text line, its one-based page and line numbers,
-  text, word count, and the font sizes found on that line.
-- `FontSizeValidator`: receives `ExtractedPdfData` and validates heading
-  candidates against the configured font-size scale.
-- `HeadingLevelValidator`: receives the same extracted data, derives the
-  heading-level sequence, and checks its traversal.
-- `ValidatorService`: coordinates extraction and validation only. It does not
-  parse PDF internals or implement either validation rule.
+- `ValidatorService`: owns PDF parsing and extraction. It creates the shared
+  `ExtractedPdfData` and coordinates the validators.
+- `FontSizeValidator`: validates heading candidates against the configured
+  font-size scale.
+- `HeadingLevelValidator`: derives the heading-level sequence and checks
+  its traversal.
+- `ExtractedPdfData`: a data structure containing extracted lines, font
+  sizes, frequency information, and the detected body-text baseline.
+- `ValidationReport`: aggregates all detected rule violations.
+
+The extraction data model is a plain data structure, not a separate service.
 
 ## Image handling
 
@@ -39,28 +41,29 @@ there is no extractable text/font metadata.
 ## Validation flow
 
 ```text
-PDF bytes
-   |
-   v
-PdfFontSizeExtractor
-   |
-   | ExtractedPdfData (one extraction)
-   v
-FontSizeValidator
-   |
-   | continue collecting issues
-   v
-HeadingLevelValidator
-   |
-   v
-ValidationReport
+Raw PDF bytes
+     |
+     v
+ValidatorService
+     |
+     | Parse PDF and extract text/font metadata
+     v
+ExtractedPdfData
+     |
+     +----------------------+
+     v                      v
+FontSizeValidator    HeadingLevelValidator
+     |                      |
+     +----------+-----------+
+                v
+        ValidationReport
 ```
 
-The service returns all detected violations. It runs both validators even if
-the first one finds document rule violations. If the shared configuration is
-invalid, it reports those configuration issues and skips heading traversal,
-which depends on that configuration. Both validators use the same extracted
-data; the PDF is not parsed a second time.
+The service extracts the PDF once and passes the same extracted data to both
+validators. It runs both validators even if the font-size validator finds
+document rule violations. If the shared configuration is invalid, it reports
+those configuration issues and skips heading traversal, which depends on that
+configuration.
 
 ## Validation report and error details
 
