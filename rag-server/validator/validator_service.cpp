@@ -34,8 +34,13 @@ ValidationReport ValidatorService::validatePdf(
     }
 
     // Run both validators even when the first one finds rule violations.
-    report.append(font_size_validator_.validate(extracted_data));
-    report.append(heading_level_validator_.validate(extracted_data));
+    const auto font_report = font_size_validator_.validate(extracted_data);
+    report.append(font_report);
+
+    // Heading-level classification depends on a valid heading configuration.
+    if (font_report.configuration_valid) {
+        report.append(heading_level_validator_.validate(extracted_data));
+    }
 
     return report;
 }
