@@ -115,6 +115,22 @@ const rag::ValidationResult result =
 The existing `hasConsistentHeadingFontSizes` method remains available when
 another component has already extracted a map of heading levels to font sizes.
 
+## Heading-level traversal
+
+The service also exposes `hasValidHeadingLevelTraversal`, which accepts heading
+levels in document order:
+
+```cpp
+const auto result = validator.hasValidHeadingLevelTraversal(
+    {1, 2, 2, 3, 2, 1}
+);
+```
+
+A transition may remain at the same level or move exactly one level up or down.
+For example, H1 -> H2 and H2 -> H1 are valid; H1 -> H3 is invalid. Levels must
+be in the H1-H6 range. PDF validation applies this check to the extracted
+heading-level sequence as well.
+
 ## Current extraction behavior and limitations
 
 Poppler extracts text words and their font sizes. The current first-pass
