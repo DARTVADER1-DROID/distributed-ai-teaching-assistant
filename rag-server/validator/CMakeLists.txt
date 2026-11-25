@@ -25,3 +25,13 @@ target_link_libraries(rag_validator
         PkgConfig::POPPLER_CPP
         PkgConfig::POPPLER
 )
+
+# Small command-line application for exercising the validator manually.
+add_executable(validator_cli
+    main.cpp
+)
+
+target_link_libraries(validator_cli
+    PRIVATE
+        rag_validator
+)
