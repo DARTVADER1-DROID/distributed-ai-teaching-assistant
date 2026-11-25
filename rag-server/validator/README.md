@@ -48,12 +48,12 @@ PdfFontSizeExtractor
    v
 FontSizeValidator
    |
-   | valid
+   | continue collecting issues
    v
 HeadingLevelValidator
    |
    v
-ValidationResult
+ValidationReport
 ```
 
 The service returns all detected violations. It runs both validators even if
@@ -132,7 +132,7 @@ if (!report.isValid()) {
 Or validate a PDF stored on disk:
 
 ```cpp
-const auto result = validator.validatePdfFile("document.pdf");
+const rag::ValidationReport report = validator.validatePdfFile("document.pdf");
 ```
 
 ## Dependency and build
