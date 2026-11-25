@@ -536,3 +536,45 @@ A later document-structure stage can use extracted headings and reading order
 to construct a hierarchy and associate body content with the nearest preceding
 heading. That structure can then be used as metadata during RAG chunking and
 vector-database ingestion.
+
+
+## 13. Manual testing with the command-line runner
+
+The validator directory includes `main.cpp`, a small command-line program
+that exercises `ValidatorService::validatePdfFile()`. It uses the default
+`ValidatorConfig` and prints every issue returned by the service, including
+the reason and any available page, line, word-count, and extracted-text
+details.
+
+Build both the library and runner from this directory:
+
+```bash
+cmake -S . -B build
+cmake --build build
+```
+
+Run the validator against a PDF:
+
+```bash
+./build/validator_cli path/to/document.pdf
+```
+
+On Windows, the executable is typically:
+
+```powershell
+.\build\Debug\validator_cli.exe path\to\document.pdf
+```
+
+The runner prints a PASS or FAIL result, configuration status, total issue
+count, and each individual issue. Its process exit codes are:
+
+| Exit code | Meaning |
+|---:|---|
+| 0 | PDF passed validation. |
+| 1 | Validation failed or one or more issues were reported. |
+| 2 | Invalid command-line usage (for example, missing PDF path). |
+
+To test a different document policy, edit the `ValidatorConfig config` in
+`main.cpp` before rebuilding. The runner is intended as a manual test
+harness; the `rag_validator` library remains independently usable by the
+RAG server.
