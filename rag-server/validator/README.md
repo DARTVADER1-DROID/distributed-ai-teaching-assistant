@@ -1,7 +1,7 @@
 # PDF Heading Validator
 
-A small C++17 service that extracts PDF font metadata once and runs independent
-heading validators against the shared extracted data.
+A small C++17 service that extracts PDF text and font metadata once and runs
+independent heading validators against the shared extracted data.
 
 ## Default heading sizes
 
@@ -18,15 +18,22 @@ The accepted font-size deviation is +/- 0.5 pt.
 
 ## Responsibilities
 
-- `PdfFontSizeExtractor`: parses the PDF once and returns `ExtractedPdfData`,
-  containing ordered font sizes, font-size frequencies, and the most frequent
-  font size used as the body-text baseline.
+- `PdfFontSizeExtractor`: parses the PDF once and returns `ExtractedPdfData`.
+  It stores each extracted text line, its one-based page and line numbers,
+  text, word count, and the font sizes found on that line.
 - `FontSizeValidator`: receives `ExtractedPdfData` and validates heading
   candidates against the configured font-size scale.
-- `HeadingLevelValidator`: receives the same `ExtractedPdfData`, derives the
+- `HeadingLevelValidator`: receives the same extracted data, derives the
   heading-level sequence, and checks its traversal.
 - `ValidatorService`: coordinates extraction and validation only. It does not
   parse PDF internals or implement either validation rule.
+
+## Image handling
+
+This validator does not extract, OCR, classify, or validate embedded images.
+It extracts selectable PDF text and its font metadata. A PDF containing only
+scanned page images or outlined text cannot currently be validated because
+there is no extractable text/font metadata.
 
 ## Validation flow
 
@@ -50,6 +57,25 @@ ValidationResult
 
 The service stops and returns the first failure. Both validators receive the
 same extracted data; the PDF is not parsed a second time.
+
+## Error details
+
+`ValidationResult` contains:
+
+- `reason`: human-readable validation failure.
+- `page_number`: one-based PDF page number, or 0 when unavailable.
+- `line_number`: one-based extracted line number within that page, or 0 when
+  unavailable.
+- `line_text`: extracted text for the line that caused the failure.
+- `word_count`: whitespace-delimited word count for that extracted line.
+
+The line grouping is inferred from Poppler text-box bounding boxes. PDFs do not
+provide a universal semantic line structure, so this is the detected visual
+line, not a guarantee of the exact line as rendered by every PDF viewer.
+Poppler documents `text_list()` as returning roughly one word per text box;
+word counts are therefore most reliable for whitespace-delimited languages.
+Complex scripts and multi-column layouts may need language/layout-specific
+handling.
 
 ## Configuration
 
@@ -90,7 +116,8 @@ std::vector<std::uint8_t> pdf_bytes = /* uploaded PDF bytes */;
 
 const rag::ValidationResult result = validator.validatePdf(pdf_bytes);
 if (!result.is_valid) {
-    // Report result.reason to the caller.
+    // Use result.reason, result.page_number, result.line_number,
+    // result.line_text, and result.word_count.
 }
 ```
 
