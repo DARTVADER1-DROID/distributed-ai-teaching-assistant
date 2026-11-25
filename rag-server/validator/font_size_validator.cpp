@@ -15,6 +15,24 @@ std::string formatFontSize(double font_size) {
     return output.str();
 }
 
+ValidationResult failureAtLine(
+    std::string reason,
+    const ExtractedPdfLine& line
+) {
+    reason += " Page " + std::to_string(line.page_number) +
+        ", line " + std::to_string(line.line_number) +
+        " (" + std::to_string(line.word_count) + " words).";
+
+    return {
+        false,
+        std::move(reason),
+        line.page_number,
+        line.line_number,
+        line.word_count,
+        line.text
+    };
+}
+
 } // namespace
 
 FontSizeValidator::FontSizeValidator(ValidatorConfig config)
@@ -60,49 +78,55 @@ ValidationResult FontSizeValidator::validate(
         return {false, "No extracted font sizes were provided."};
     }
 
-    std::map<int, double> detected_heading_sizes;
+    struct DetectedSize {
+        double font_size;
+        const ExtractedPdfLine* line;
+    };
 
-    for (const auto& [font_size, frequency] : extracted_data.font_size_frequency) {
-        (void)frequency;
-        if (font_size <= extracted_data.body_font_size +
-                config_.body_font_size_tolerance_points) {
-            continue;
-        }
+    std::map<int, DetectedSize> detected_heading_sizes;
 
-        int matched_level = 0;
-        double smallest_difference = std::numeric_limits<double>::max();
-        for (const auto& [level, expected_size] : config_.heading_font_sizes) {
-            const double difference = std::fabs(font_size - expected_size);
-            if (difference < smallest_difference) {
-                smallest_difference = difference;
-                matched_level = level;
+    for (const auto& line : extracted_data.lines) {
+        for (const double font_size : line.font_sizes) {
+            if (font_size <= extracted_data.body_font_size +
+                    config_.body_font_size_tolerance_points) {
+                continue;
             }
-        }
 
-        if (smallest_difference > config_.heading_font_size_tolerance_points) {
-            return {
-                false,
-                "Detected non-body text at " + formatFontSize(font_size) +
-                    " pt, but it does not match any configured heading size "
-                    "(H1-H6, tolerance +/- " +
-                    formatFontSize(config_.heading_font_size_tolerance_points) + " pt)."
-            };
-        }
+            int matched_level = 0;
+            double smallest_difference = std::numeric_limits<double>::max();
+            for (const auto& [level, expected_size] : config_.heading_font_sizes) {
+                const double difference = std::fabs(font_size - expected_size);
+                if (difference < smallest_difference) {
+                    smallest_difference = difference;
+                    matched_level = level;
+                }
+            }
 
-        const auto existing = detected_heading_sizes.find(matched_level);
-        if (existing != detected_heading_sizes.end() &&
-            std::fabs(existing->second - font_size) >
-                config_.heading_font_size_tolerance_points) {
-            return {
-                false,
-                "H" + std::to_string(matched_level) +
-                    " uses inconsistent font sizes: " +
-                    formatFontSize(existing->second) + " pt and " +
-                    formatFontSize(font_size) + " pt."
-            };
-        }
+            if (smallest_difference > config_.heading_font_size_tolerance_points) {
+                return failureAtLine(
+                    "Detected non-body text at " + formatFontSize(font_size) +
+                        " pt, but it does not match any configured heading size "
+                        "(H1-H6, tolerance +/- " +
+                        formatFontSize(config_.heading_font_size_tolerance_points) + " pt).",
+                    line
+                );
+            }
 
-        detected_heading_sizes[matched_level] = font_size;
+            const auto existing = detected_heading_sizes.find(matched_level);
+            if (existing != detected_heading_sizes.end() &&
+                std::fabs(existing->second.font_size - font_size) >
+                    config_.heading_font_size_tolerance_points) {
+                return failureAtLine(
+                    "H" + std::to_string(matched_level) +
+                        " uses inconsistent font sizes: " +
+                        formatFontSize(existing->second.font_size) + " pt and " +
+                        formatFontSize(font_size) + " pt.",
+                    line
+                );
+            }
+
+            detected_heading_sizes[matched_level] = {font_size, &line};
+        }
     }
 
     if (detected_heading_sizes.empty()) {
