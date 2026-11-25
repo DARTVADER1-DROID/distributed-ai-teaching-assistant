@@ -26,6 +26,8 @@ The accepted font-size deviation is +/- 0.5 pt.
   the detected body-font baseline.
 - `HeadingLevelValidator`: derives the heading-level sequence and checks
   its traversal.
+- `PageLimitValidator`: checks the extracted PDF page count against configured
+  minimum and maximum limits.
 - `ExtractedPdfData`: a data structure containing extracted lines, font
   sizes, frequency information, and the detected body-text baseline.
 - `ValidationReport`: aggregates all detected rule violations.
@@ -56,6 +58,9 @@ ExtractedPdfData
 FontSizeValidator    HeadingLevelValidator
      |                      |
      +----------+-----------+
+                |
+                v
+        PageLimitValidator
                 v
         ValidationReport
 ```
@@ -106,10 +111,19 @@ config.heading_font_sizes = {
 config.heading_font_size_tolerance_points = 0.75;
 config.body_font_size_tolerance_points = 0.4;
 config.paragraph_font_size_tolerance_points = 0.5;
+config.minimum_pages = 1;
+config.maximum_pages = 100; // Set to 0 for no maximum.
 config.font_size_precision_decimal_places = 2;
 
 rag::ValidatorService validator(config);
 ```
+
+## Page limits
+
+`minimum_pages` defaults to 1. `maximum_pages` defaults to 0, which disables
+an upper limit. Set `maximum_pages` to a positive value to enforce it. A
+configuration where the maximum is lower than the minimum is invalid. Page
+limit violations are aggregated with font-size and heading-level violations.
 
 ## Heading-level traversal rule
 
