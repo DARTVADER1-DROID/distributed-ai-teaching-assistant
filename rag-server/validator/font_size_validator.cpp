@@ -1,7 +1,9 @@
 #include "font_size_validator.hpp"
 
 #include <cmath>
+#include <limits>
 #include <sstream>
+#include <string>
 #include <utility>
 
 namespace rag {
@@ -17,11 +19,6 @@ std::string formatFontSize(double font_size) {
 
 FontSizeValidator::FontSizeValidator(ValidatorConfig config)
     : config_(std::move(config)) {}
-
-const std::map<int, double>& FontSizeValidator::defaultHeadingFontSizes() {
-    static const ValidatorConfig defaults;
-    return defaults.heading_font_sizes;
-}
 
 ValidationResult FontSizeValidator::validateConfiguration() const {
     if (config_.heading_font_sizes.empty()) {
@@ -54,49 +51,66 @@ ValidationResult FontSizeValidator::validateConfiguration() const {
 }
 
 ValidationResult FontSizeValidator::validate(
-    const std::map<int, double>& heading_font_sizes
+    const ExtractedPdfData& extracted_data
 ) const {
     const auto config_result = validateConfiguration();
-    if (!config_result.is_valid) {
-        return config_result;
+    if (!config_result.is_valid) return config_result;
+
+    if (extracted_data.font_size_frequency.empty()) {
+        return {false, "No extracted font sizes were provided."};
     }
 
-    if (heading_font_sizes.empty()) {
-        return {false, "No heading font sizes were provided."};
-    }
+    std::map<int, double> detected_heading_sizes;
 
-    for (const auto& [heading_level, actual_font_size] : heading_font_sizes) {
-        if (heading_level < 1 || heading_level > 6) {
-            return {false, "Invalid heading level " +
-                std::to_string(heading_level) + "; expected a level from H1 to H6."};
+    for (const auto& [font_size, frequency] : extracted_data.font_size_frequency) {
+        (void)frequency;
+        if (font_size <= extracted_data.body_font_size +
+                config_.body_font_size_tolerance_points) {
+            continue;
         }
 
-        if (!std::isfinite(actual_font_size)) {
-            return {false, "H" + std::to_string(heading_level) +
-                " has a non-finite font size."};
+        int matched_level = 0;
+        double smallest_difference = std::numeric_limits<double>::max();
+        for (const auto& [level, expected_size] : config_.heading_font_sizes) {
+            const double difference = std::fabs(font_size - expected_size);
+            if (difference < smallest_difference) {
+                smallest_difference = difference;
+                matched_level = level;
+            }
         }
 
-        if (actual_font_size <= 0.0) {
-            return {false, "H" + std::to_string(heading_level) +
-                " has a font size that must be greater than zero."};
-        }
-
-        const auto expected = config_.heading_font_sizes.find(heading_level);
-        if (expected == config_.heading_font_sizes.end()) {
-            return {false, "No expected font size is configured for H" +
-                std::to_string(heading_level) + "."};
-        }
-
-        if (std::fabs(actual_font_size - expected->second) >
-            config_.heading_font_size_tolerance_points) {
+        if (smallest_difference > config_.heading_font_size_tolerance_points) {
             return {
                 false,
-                "H" + std::to_string(heading_level) + " font size is " +
-                    formatFontSize(actual_font_size) + " pt; expected " +
-                    formatFontSize(expected->second) + " pt (tolerance: +/- " +
+                "Detected non-body text at " + formatFontSize(font_size) +
+                    " pt, but it does not match any configured heading size "
+                    "(H1-H6, tolerance +/- " +
                     formatFontSize(config_.heading_font_size_tolerance_points) + " pt)."
             };
         }
+
+        const auto existing = detected_heading_sizes.find(matched_level);
+        if (existing != detected_heading_sizes.end() &&
+            std::fabs(existing->second - font_size) >
+                config_.heading_font_size_tolerance_points) {
+            return {
+                false,
+                "H" + std::to_string(matched_level) +
+                    " uses inconsistent font sizes: " +
+                    formatFontSize(existing->second) + " pt and " +
+                    formatFontSize(font_size) + " pt."
+            };
+        }
+
+        detected_heading_sizes[matched_level] = font_size;
+    }
+
+    if (detected_heading_sizes.empty()) {
+        return {
+            false,
+            "No heading font sizes could be identified. The PDF may contain "
+            "only body text, or its headings may use the same size as body text."
+        };
     }
 
     return {true, ""};
