@@ -3,12 +3,43 @@
 #include <poppler/cpp/poppler-document.h>
 #include <poppler/cpp/poppler-page.h>
 
+#include <algorithm>
 #include <cmath>
 #include <limits>
 #include <memory>
+#include <sstream>
 #include <string>
 
 namespace rag {
+namespace {
+
+std::size_t countWords(const std::string& text) {
+    std::istringstream input(text);
+    std::size_t count = 0;
+    std::string word;
+    while (input >> word) {
+        ++count;
+    }
+    return count;
+}
+
+double verticalCenter(const poppler::rectf& bounds) {
+    return bounds.top() + bounds.height() / 2.0;
+}
+
+bool belongsToLine(
+    const poppler::rectf& bounds,
+    const ExtractedPdfLine& line,
+    double line_center,
+    double line_height
+) {
+    (void)line;
+    const double center = verticalCenter(bounds);
+    const double tolerance = std::max(2.0, std::min(bounds.height(), line_height) * 0.5);
+    return std::fabs(center - line_center) <= tolerance;
+}
+
+} // namespace
 
 ValidationResult PdfFontSizeExtractor::extract(
     const std::vector<std::uint8_t>& pdf_data,
@@ -51,14 +82,63 @@ ValidationResult PdfFontSizeExtractor::extract(
     for (int page_index = 0; page_index < document->pages(); ++page_index) {
         std::unique_ptr<poppler::page> page(document->create_page(page_index));
         if (!page) {
-            return {false, "Failed to read PDF page " +
-                std::to_string(page_index + 1) + "."};
+            return {
+                false,
+                "Failed to read PDF page " + std::to_string(page_index + 1) + ".",
+                static_cast<std::size_t>(page_index + 1)
+            };
         }
 
         const auto text_boxes =
             page->text_list(poppler::page::text_list_include_font);
 
+        std::size_t page_line_number = 0;
+        double current_line_center = 0.0;
+        double current_line_height = 0.0;
+
         for (const auto& text_box : text_boxes) {
+            const std::string word = text_box.text().to_utf8();
+            if (word.empty()) {
+                continue;
+            }
+
+            const poppler::rectf bounds = text_box.bbox();
+            const double center = verticalCenter(bounds);
+            const double height = std::max(1.0, bounds.height());
+
+            if (extracted_data.lines.empty() ||
+                extracted_data.lines.back().page_number !=
+                    static_cast<std::size_t>(page_index + 1) ||
+                !belongsToLine(
+                    bounds,
+                    extracted_data.lines.back(),
+                    current_line_center,
+                    current_line_height
+                )) {
+                ++page_line_number;
+                ExtractedPdfLine line;
+                line.page_number = static_cast<std::size_t>(page_index + 1);
+                line.line_number = page_line_number;
+                extracted_data.lines.push_back(std::move(line));
+                current_line_center = center;
+                current_line_height = height;
+            } else {
+                // Keep the line center stable while allowing small baseline drift.
+                current_line_center =
+                    (current_line_center * static_cast<double>(
+                        extracted_data.lines.back().word_count
+                    ) + center) /
+                    static_cast<double>(extracted_data.lines.back().word_count + 1);
+                current_line_height = std::max(current_line_height, height);
+            }
+
+            auto& line = extracted_data.lines.back();
+            if (!line.text.empty()) {
+                line.text += ' ';
+            }
+            line.text += word;
+            line.word_count = countWords(line.text);
+
             if (!text_box.has_font_info()) {
                 continue;
             }
@@ -70,6 +150,7 @@ ValidationResult PdfFontSizeExtractor::extract(
 
             const double normalized =
                 std::round(size * precision_scale) / precision_scale;
+            line.font_sizes.push_back(normalized);
             extracted_data.ordered_font_sizes.push_back(normalized);
             ++extracted_data.font_size_frequency[normalized];
         }
