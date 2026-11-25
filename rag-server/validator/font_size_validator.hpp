@@ -1,7 +1,8 @@
 #pragma once
 
 #include "config/validator_config.hpp"
-#include "pdf_font_size_extractor.hpp"
+#include "extracted_pdf_data.hpp"
+#include "validation_result.hpp"
 
 namespace rag {
 
