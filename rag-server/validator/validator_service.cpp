@@ -101,7 +101,7 @@ ValidationResult ValidatorService::hasConsistentHeadingFontSizes(
                 "H" + std::to_string(heading_level) + " font size is " +
                     formatFontSize(actual_font_size) + " pt; expected " +
                     formatFontSize(expected_font_size) + " pt (tolerance: +/- " +
-                    formatFontSize(FONT_SIZE_TOLERANCE_POINTS) + " pt)."
+                    formatFontSize(config_.heading_font_size_tolerance_points) + " pt)."
             };
         }
     }
@@ -235,7 +235,7 @@ ValidationResult ValidatorService::extractAndValidateHeadingFontSizes(
     for (const auto& [font_size, frequency] : font_size_frequency) {
         (void)frequency;
 
-        if (font_size <= body_font_size + FONT_SIZE_TOLERANCE_POINTS) {
+        if (font_size <= body_font_size + config_.body_font_size_tolerance_points) {
             continue;
         }
 
@@ -252,13 +252,13 @@ ValidationResult ValidatorService::extractAndValidateHeadingFontSizes(
             }
         }
 
-        if (smallest_difference > FONT_SIZE_TOLERANCE_POINTS) {
+        if (smallest_difference > config_.heading_font_size_tolerance_points) {
             return {
                 false,
                 "Detected non-body text at " + formatFontSize(font_size) +
                     " pt, but it does not match any configured heading size "
                     "(H1-H6, tolerance +/- " +
-                    formatFontSize(FONT_SIZE_TOLERANCE_POINTS) + " pt)."
+                    formatFontSize(config_.heading_font_size_tolerance_points) + " pt)."
             };
         }
 
@@ -272,7 +272,7 @@ ValidationResult ValidatorService::extractAndValidateHeadingFontSizes(
         const auto existing = detected_heading_sizes.find(matched_level);
         if (existing != detected_heading_sizes.end() &&
             std::fabs(existing->second - font_size) >
-                FONT_SIZE_TOLERANCE_POINTS) {
+                config_.heading_font_size_tolerance_points) {
             return {
                 false,
                 "H" + std::to_string(matched_level) +
