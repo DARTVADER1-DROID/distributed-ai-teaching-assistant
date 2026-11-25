@@ -9,7 +9,7 @@
 namespace rag {
 namespace {
 
-ValidationResult failureAtLine(
+ValidationIssue issueAtLine(
     std::string reason,
     const ExtractedPdfLine& line
 ) {
@@ -18,7 +18,6 @@ ValidationResult failureAtLine(
         " (" + std::to_string(line.word_count) + " words).";
 
     return {
-        false,
         std::move(reason),
         line.page_number,
         line.line_number,
@@ -32,11 +31,16 @@ ValidationResult failureAtLine(
 HeadingLevelValidator::HeadingLevelValidator(ValidatorConfig config)
     : config_(std::move(config)) {}
 
-ValidationResult HeadingLevelValidator::validate(
+ValidationReport HeadingLevelValidator::validate(
     const ExtractedPdfData& extracted_data
 ) const {
+    ValidationReport report;
+
     if (extracted_data.lines.empty()) {
-        return {false, "No extracted PDF lines were provided for traversal validation."};
+        report.addIssue({
+            "No extracted PDF lines were provided for traversal validation."
+        });
+        return report;
     }
 
     struct DetectedHeading {
@@ -79,7 +83,10 @@ ValidationResult HeadingLevelValidator::validate(
     }
 
     if (headings.empty()) {
-        return {false, "No heading levels could be derived from the extracted PDF lines."};
+        report.addIssue({
+            "No heading levels could be derived from the extracted PDF lines."
+        });
+        return report;
     }
 
     for (std::size_t index = 1; index < headings.size(); ++index) {
@@ -87,18 +94,17 @@ ValidationResult HeadingLevelValidator::validate(
         const int current = headings[index].level;
 
         if (std::abs(current - previous) > 1) {
-            const auto& line = *headings[index].line;
-            return failureAtLine(
+            report.addIssue(issueAtLine(
                 "Invalid heading level transition from H" +
                     std::to_string(previous) + " to H" +
                     std::to_string(current) +
                     ". Heading levels may change by only one level at a time.",
-                line
-            );
+                *headings[index].line
+            ));
         }
     }
 
-    return {true, ""};
+    return report;
 }
 
 } // namespace rag
