@@ -34,6 +34,19 @@ ValidationIssue issueAtLine(
     };
 }
 
+bool isHeadingCandidateLine(
+    const ExtractedPdfLine& line,
+    double body_font_size,
+    double body_tolerance
+) {
+    for (const double size : line.font_sizes) {
+        if (size > body_font_size + body_tolerance) {
+            return true;
+        }
+    }
+    return false;
+}
+
 } // namespace
 
 FontSizeValidator::FontSizeValidator(ValidatorConfig config)
@@ -71,6 +84,12 @@ ValidationReport FontSizeValidator::validateConfiguration() const {
             "Body font-size tolerance must be finite and non-negative."
         });
     }
+    if (!std::isfinite(config_.paragraph_font_size_tolerance_points) ||
+        config_.paragraph_font_size_tolerance_points < 0.0) {
+        report.addIssue({
+            "Paragraph font-size tolerance must be finite and non-negative."
+        });
+    }
     if (config_.font_size_precision_decimal_places < 0 ||
         config_.font_size_precision_decimal_places > 6) {
         report.addIssue({
@@ -96,57 +115,109 @@ ValidationReport FontSizeValidator::validate(
     }
 
     std::map<int, double> detected_heading_sizes;
+    bool paragraph_text_found = false;
 
     for (const auto& line : extracted_data.lines) {
-        // A text line may contain one text box per word; check each distinct
-        // font size once per line to avoid duplicate issues for the same rule break.
+        if (line.font_sizes.empty() || line.text.empty()) {
+            continue;
+        }
+
+        // A visual line may contain one text box per word. Deduplicate sizes
+        // so a repeated word-level font size creates only one issue per line.
         const std::set<double> line_font_sizes(
             line.font_sizes.begin(), line.font_sizes.end()
         );
-        for (const double font_size : line_font_sizes) {
-            if (font_size <= extracted_data.body_font_size +
-                    config_.body_font_size_tolerance_points) {
-                continue;
-            }
 
-            int matched_level = 0;
-            double smallest_difference = std::numeric_limits<double>::max();
-            for (const auto& [level, expected_size] : config_.heading_font_sizes) {
-                const double difference = std::fabs(font_size - expected_size);
-                if (difference < smallest_difference) {
-                    smallest_difference = difference;
-                    matched_level = level;
+        const bool heading_candidate = isHeadingCandidateLine(
+            line,
+            extracted_data.body_font_size,
+            config_.body_font_size_tolerance_points
+        );
+
+        if (heading_candidate) {
+            // Validate heading candidates against the configured H1-H6 scale.
+            for (const double font_size : line_font_sizes) {
+                if (font_size <= extracted_data.body_font_size +
+                        config_.body_font_size_tolerance_points) {
+                    continue;
+                }
+
+                int matched_level = 0;
+                double smallest_difference =
+                    std::numeric_limits<double>::max();
+
+                for (const auto& [level, expected_size] :
+                     config_.heading_font_sizes) {
+                    const double difference =
+                        std::fabs(font_size - expected_size);
+                    if (difference < smallest_difference) {
+                        smallest_difference = difference;
+                        matched_level = level;
+                    }
+                }
+
+                if (smallest_difference >
+                    config_.heading_font_size_tolerance_points) {
+                    report.addIssue(issueAtLine(
+                        "Detected non-body text at " +
+                            formatFontSize(font_size) +
+                            " pt, but it does not match any configured heading "
+                            "size (H1-H6, tolerance +/- " +
+                            formatFontSize(
+                                config_.heading_font_size_tolerance_points
+                            ) + " pt).",
+                        line
+                    ));
+                    continue;
+                }
+
+                const auto existing =
+                    detected_heading_sizes.find(matched_level);
+                if (existing != detected_heading_sizes.end() &&
+                    std::fabs(existing->second - font_size) >
+                        config_.heading_font_size_tolerance_points) {
+                    report.addIssue(issueAtLine(
+                        "H" + std::to_string(matched_level) +
+                            " uses inconsistent font sizes: " +
+                            formatFontSize(existing->second) + " pt and " +
+                            formatFontSize(font_size) + " pt.",
+                        line
+                    ));
+                    continue;
+                }
+
+                if (existing == detected_heading_sizes.end()) {
+                    detected_heading_sizes[matched_level] = font_size;
                 }
             }
 
-            if (smallest_difference > config_.heading_font_size_tolerance_points) {
-                report.addIssue(issueAtLine(
-                    "Detected non-body text at " + formatFontSize(font_size) +
-                        " pt, but it does not match any configured heading size "
-                        "(H1-H6, tolerance +/- " +
-                        formatFontSize(config_.heading_font_size_tolerance_points) + " pt).",
-                    line
-                ));
+            // Do not treat a heading line as a paragraph, even if it contains
+            // additional text boxes using the body font size.
+            continue;
+        }
+
+        // Non-heading lines are treated as paragraph/body-text candidates.
+        // Compare each distinct size with the document's detected body baseline.
+        paragraph_text_found = true;
+        for (const double font_size : line_font_sizes) {
+            const double difference =
+                std::fabs(font_size - extracted_data.body_font_size);
+
+            if (difference <=
+                config_.paragraph_font_size_tolerance_points) {
                 continue;
             }
 
-            const auto existing = detected_heading_sizes.find(matched_level);
-            if (existing != detected_heading_sizes.end() &&
-                std::fabs(existing->second - font_size) >
-                    config_.heading_font_size_tolerance_points) {
-                report.addIssue(issueAtLine(
-                    "H" + std::to_string(matched_level) +
-                        " uses inconsistent font sizes: " +
-                        formatFontSize(existing->second) + " pt and " +
-                        formatFontSize(font_size) + " pt.",
-                    line
-                ));
-                continue;
-            }
-
-            if (existing == detected_heading_sizes.end()) {
-                detected_heading_sizes[matched_level] = font_size;
-            }
+            report.addIssue(issueAtLine(
+                "Paragraph text uses " + formatFontSize(font_size) +
+                    " pt, but the detected body-font size is " +
+                    formatFontSize(extracted_data.body_font_size) +
+                    " pt (allowed deviation +/- " +
+                    formatFontSize(
+                        config_.paragraph_font_size_tolerance_points
+                    ) + " pt).",
+                line
+            ));
         }
     }
 
@@ -154,6 +225,12 @@ ValidationReport FontSizeValidator::validate(
         report.addIssue({
             "No heading font sizes could be identified. The PDF may contain "
             "only body text, or its headings may use the same size as body text."
+        });
+    }
+
+    if (!paragraph_text_found && report.isValid()) {
+        report.addIssue({
+            "No paragraph/body-text lines could be identified for font-size validation."
         });
     }
 
