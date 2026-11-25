@@ -1,6 +1,7 @@
 #include "validator_service.hpp"
 
 #include <cmath>
+#include <string>
 
 namespace rag {
 
@@ -17,33 +18,45 @@ const std::map<int, double>& ValidatorService::defaultHeadingFontSizes() {
     return default_sizes;
 }
 
-bool ValidatorService::hasConsistentHeadingFontSizes(
+ValidationResult ValidatorService::hasConsistentHeadingFontSizes(
     const std::map<int, double>& heading_font_sizes
 ) const {
     if (heading_font_sizes.empty()) {
-        return false;
+        return {false, "No heading font sizes were provided."};
     }
 
     const auto& default_sizes = defaultHeadingFontSizes();
 
     for (const auto& [heading_level, actual_font_size] : heading_font_sizes) {
-        if (heading_level < 1 || heading_level > 6 ||
-            !std::isfinite(actual_font_size) || actual_font_size <= 0.0) {
-            return false;
+        if (heading_level < 1 || heading_level > 6) {
+            return {false, "Invalid heading level " +
+                std::to_string(heading_level) + "; expected a level from H1 to H6."};
         }
 
-        const auto expected = default_sizes.find(heading_level);
-        if (expected == default_sizes.end()) {
-            return false;
+        if (!std::isfinite(actual_font_size)) {
+            return {false, "H" + std::to_string(heading_level) +
+                " has a non-finite font size."};
         }
 
-        if (std::fabs(actual_font_size - expected->second) >
+        if (actual_font_size <= 0.0) {
+            return {false, "H" + std::to_string(heading_level) +
+                " has a font size that must be greater than zero."};
+        }
+
+        const double expected_font_size = default_sizes.at(heading_level);
+        if (std::fabs(actual_font_size - expected_font_size) >
             FONT_SIZE_TOLERANCE_POINTS) {
-            return false;
+            return {
+                false,
+                "H" + std::to_string(heading_level) + " font size is " +
+                    std::to_string(actual_font_size) + " pt; expected " +
+                    std::to_string(expected_font_size) + " pt (tolerance: +/- " +
+                    std::to_string(FONT_SIZE_TOLERANCE_POINTS) + " pt)."
+            };
         }
     }
 
-    return true;
+    return {true, ""};
 }
 
 } // namespace rag
