@@ -79,6 +79,7 @@ ValidationReport FontSizeValidator::validateConfiguration() const {
         });
     }
 
+    report.configuration_valid = report.isValid();
     return report;
 }
 
