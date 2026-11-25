@@ -10,14 +10,14 @@ The current pipeline checks:
 2. Heading and paragraph/body-text font sizes.
 3. Heading-level traversal.
 
-All detected rule violations are collected in a single \`ValidationReport\`.
+All detected rule violations are collected in a single `ValidationReport`.
 The validator is heuristic-based: it checks extracted PDF structure and
 typography, but it does not understand document meaning or guarantee that a
 visually identified heading is semantically a heading.
 
 ## 1. Project structure
 
-\`\`\`text
+```text
 validator/
 ├── config/
 │   └── validator_config.hpp
@@ -33,27 +33,27 @@ validator/
 ├── validator_service.cpp
 ├── CMakeLists.txt
 └── README.md
-\`\`\`
+```
 
 ### Component responsibilities
 
 | Component | Responsibility |
 |---|---|
-| \`ValidatorService\` | Owns PDF parsing and extraction, then coordinates the validation stages. |
-| \`PageLimitValidator\` | Checks the PDF page count against configured minimum and maximum values. |
-| \`FontSizeValidator\` | Checks configured heading sizes and paragraph/body-text sizes. |
-| \`HeadingLevelValidator\` | Derives heading levels from font sizes and checks their traversal sequence. |
-| \`ValidatorConfig\` | Holds runtime-tunable validation rules and tolerances. |
-| \`ExtractedPdfData\` | Holds the page count, extracted lines, font sizes, frequency data, and detected body-font baseline. |
-| \`ValidationReport\` | Aggregates configuration errors and document rule violations. |
+| `ValidatorService` | Owns PDF parsing and extraction, then coordinates the validation stages. |
+| `PageLimitValidator` | Checks the PDF page count against configured minimum and maximum values. |
+| `FontSizeValidator` | Checks configured heading sizes and paragraph/body-text sizes. |
+| `HeadingLevelValidator` | Derives heading levels from font sizes and checks their traversal sequence. |
+| `ValidatorConfig` | Holds runtime-tunable validation rules and tolerances. |
+| `ExtractedPdfData` | Holds the page count, extracted lines, font sizes, frequency data, and detected body-font baseline. |
+| `ValidationReport` | Aggregates configuration errors and document rule violations. |
 
-PDF parsing and extraction intentionally remain inside \`ValidatorService\`.
+PDF parsing and extraction intentionally remain inside `ValidatorService`.
 The extracted-data structure is only a data-transfer model; it is not another
 service.
 
 ## 2. Validation pipeline
 
-\`\`\`text
+```text
                     Raw PDF bytes
                           |
                           v
@@ -79,10 +79,10 @@ service.
                  |
                  v
            ValidationReport
-\`\`\`
+```
 
 The service performs extraction once and shares the resulting
-\`ExtractedPdfData\` with the validators.
+`ExtractedPdfData` with the validators.
 
 ### Execution behavior
 
@@ -108,24 +108,24 @@ because heading traversal depends on the same heading-size configuration.
 
 ## 3. Configuration
 
-All rules are configured through \`rag::ValidatorConfig\` in
-\`config/validator_config.hpp\`.
+All rules are configured through `rag::ValidatorConfig` in
+`config/validator_config.hpp`.
 
 ### Default values
 
 | Setting | Default | Description |
 |---|---:|---|
-| \`heading_font_sizes\` | H1=24, H2=20, H3=18, H4=16, H5=14, H6=12 pt | Expected font size for each heading level. |
-| \`heading_font_size_tolerance_points\` | 0.5 pt | Maximum difference from a configured heading size. |
-| \`body_font_size_tolerance_points\` | 0.5 pt | Difference above the body baseline required for a line to be considered a heading candidate. |
-| \`paragraph_font_size_tolerance_points\` | 0.5 pt | Maximum allowed difference between paragraph/body text and the detected body baseline. |
-| \`minimum_pages\` | 1 | Minimum number of pages required. |
-| \`maximum_pages\` | 0 | Maximum number of pages; zero disables the upper limit. |
-| \`font_size_precision_decimal_places\` | 2 | Decimal places used when normalizing extracted font sizes; valid range is 0–6. |
+| `heading_font_sizes` | H1=24, H2=20, H3=18, H4=16, H5=14, H6=12 pt | Expected font size for each heading level. |
+| `heading_font_size_tolerance_points` | 0.5 pt | Maximum difference from a configured heading size. |
+| `body_font_size_tolerance_points` | 0.5 pt | Difference above the body baseline required for a line to be considered a heading candidate. |
+| `paragraph_font_size_tolerance_points` | 0.5 pt | Maximum allowed difference between paragraph/body text and the detected body baseline. |
+| `minimum_pages` | 1 | Minimum number of pages required. |
+| `maximum_pages` | 0 | Maximum number of pages; zero disables the upper limit. |
+| `font_size_precision_decimal_places` | 2 | Decimal places used when normalizing extracted font sizes; valid range is 0–6. |
 
 ### Example configuration
 
-\`\`\`cpp
+```cpp
 #include "validator_service.hpp"
 
 rag::ValidatorConfig config;
@@ -150,7 +150,7 @@ config.maximum_pages = 100;
 config.font_size_precision_decimal_places = 2;
 
 rag::ValidatorService validator(config);
-\`\`\`
+```
 
 The heading-size map may contain only the levels required by a particular
 document policy. Configured heading levels must be in the H1–H6 range, and
@@ -160,15 +160,15 @@ configured sizes must be finite and greater than zero.
 
 ### Purpose
 
-\`PageLimitValidator\` checks the total number of pages in the PDF. It does not
+`PageLimitValidator` checks the total number of pages in the PDF. It does not
 inspect text content and does not need paragraph or heading extraction.
 
 ### Rules
 
-- The page count must be greater than or equal to \`minimum_pages\`.
-- If \`maximum_pages\` is greater than zero, the page count must be less than
-  or equal to \`maximum_pages\`.
-- A \`maximum_pages\` value of zero means that no upper limit is enforced.
+- The page count must be greater than or equal to `minimum_pages`.
+- If `maximum_pages` is greater than zero, the page count must be less than
+  or equal to `maximum_pages`.
+- A `maximum_pages` value of zero means that no upper limit is enforced.
 - The maximum must be zero or greater than or equal to the minimum.
 
 The limits are inclusive. For example, with a minimum of 5 and maximum of 20,
@@ -178,63 +178,63 @@ PDFs containing 5 or 20 pages pass the page-count rule.
 
 Minimum only:
 
-\`\`\`cpp
+```cpp
 config.minimum_pages = 5;
 config.maximum_pages = 0; // No maximum.
-\`\`\`
+```
 
 Minimum and maximum:
 
-\`\`\`cpp
+```cpp
 config.minimum_pages = 5;
 config.maximum_pages = 20;
-\`\`\`
+```
 
 Maximum only, while retaining the default minimum of one page:
 
-\`\`\`cpp
+```cpp
 config.minimum_pages = 1;
 config.maximum_pages = 20;
-\`\`\`
+```
 
 Invalid configuration:
 
-\`\`\`cpp
+```cpp
 config.minimum_pages = 20;
 config.maximum_pages = 10; // Invalid: maximum is below minimum.
-\`\`\`
+```
 
 An invalid page-limit configuration is reported with
-\`configuration_valid = false\`. The page-limit validator does not silently
+`configuration_valid = false`. The page-limit validator does not silently
 swap the values or choose a replacement.
 
 ### Page-limit issue examples
 
 For a PDF with 3 pages and a minimum of 5:
 
-\`\`\`text
+```text
 PDF contains 3 pages; the minimum required is 5.
-\`\`\`
+```
 
 For a PDF with 25 pages and a maximum of 20:
 
-\`\`\`text
+```text
 PDF contains 25 pages; the maximum allowed is 20.
-\`\`\`
+```
 
 Page-count issues do not currently include a line number or line text because
 they apply to the document as a whole.
 
 ## 5. Font-size validation
 
-\`FontSizeValidator\` performs two related checks using the extracted font-size
+`FontSizeValidator` performs two related checks using the extracted font-size
 data.
 
 ### 5.1 Body-font baseline
 
 The extraction stage counts occurrences of each valid font size across the
 PDF. The most frequently occurring font size is selected as
-\`ExtractedPdfData::body_font_size\`.
+`ExtractedPdfData::body_font_size`.
 
 This is a heuristic baseline. It is not supplied by PDF semantics and may not
 be the actual body size in documents with unusual typography or a large number
@@ -245,13 +245,13 @@ of tables, captions, footnotes, or headings.
 A line is considered a heading candidate when at least one of its extracted
 font sizes is greater than:
 
-\`\`\`text
+```text
 body_font_size + body_font_size_tolerance_points
-\`\`\`
+```
 
 Each distinct font size above that threshold is compared with the configured
 H1–H6 sizes. A match is accepted when its absolute difference from the nearest
-configured size is within \`heading_font_size_tolerance_points\`.
+configured size is within `heading_font_size_tolerance_points`.
 
 The validator reports:
 
@@ -273,7 +273,7 @@ paragraph/body-text candidate.
 
 Each distinct font size on that line is compared with the detected body-font
 baseline. The line is reported when the absolute difference exceeds
-\`paragraph_font_size_tolerance_points\`.
+`paragraph_font_size_tolerance_points`.
 
 For example, if the detected body size is 11 pt and paragraph tolerance is
 0.5 pt:
@@ -300,7 +300,7 @@ be reliably identified as having headings by this font-size heuristic alone.
 
 ## 6. Heading-level traversal
 
-\`HeadingLevelValidator\` independently derives a level for each line that
+`HeadingLevelValidator` independently derives a level for each line that
 matches a configured heading size and is above the body-font threshold.
 
 The current traversal rule allows adjacent detected headings to:
@@ -327,9 +327,9 @@ structuring/ingestion stage.
 
 ## 7. Validation report
 
-Both public service methods return \`rag::ValidationReport\`:
+Both public service methods return `rag::ValidationReport`:
 
-\`\`\`cpp
+```cpp
 struct ValidationReport {
     std::vector<ValidationIssue> issues;
     bool configuration_valid = true;
@@ -338,27 +338,27 @@ struct ValidationReport {
     void addIssue(ValidationIssue issue);
     void append(const ValidationReport& other);
 };
-\`\`\`
+```
 
 ### ValidationIssue fields
 
 | Field | Meaning |
 |---|---|
-| \`reason\` | Human-readable explanation of the rule violation. |
-| \`page_number\` | One-based PDF page number; zero when not applicable or unavailable. |
-| \`line_number\` | One-based inferred visual line number; zero when not applicable or unavailable. |
-| \`word_count\` | Whitespace-delimited word count for the extracted line. |
-| \`line_text\` | Extracted text for the line associated with the issue. |
+| `reason` | Human-readable explanation of the rule violation. |
+| `page_number` | One-based PDF page number; zero when not applicable or unavailable. |
+| `line_number` | One-based inferred visual line number; zero when not applicable or unavailable. |
+| `word_count` | Whitespace-delimited word count for the extracted line. |
+| `line_text` | Extracted text for the line associated with the issue. |
 
 Page-level issues normally have page and line numbers set to zero. Extraction
 errors may provide a page number when a particular page could not be read.
 
 ### Report semantics
 
-- \`report.isValid()\` returns true only when \`issues\` is empty.
-- \`configuration_valid\` indicates whether the configuration checks performed
+- `report.isValid()` returns true only when `issues` is empty.
+- `configuration_valid` indicates whether the configuration checks performed
   by the validators were valid.
-- \`append()\` adds every issue from another report and combines configuration
+- `append()` adds every issue from another report and combines configuration
   validity using logical AND.
 - Multiple independent document violations can appear in the same report.
 
@@ -373,7 +373,7 @@ rules.
 This is suitable when a PDF is received from an HTTP upload or another
 in-memory source.
 
-\`\`\`cpp
+```cpp
 #include "validator_service.hpp"
 
 #include <cstdint>
@@ -392,37 +392,37 @@ int main() {
     const rag::ValidationReport report = validator.validatePdf(pdf_bytes);
 
     if (report.isValid()) {
-        std::cout << "PDF passed validation.\\n";
+        std::cout << "PDF passed validation.\n";
         return 0;
     }
 
     for (const auto& issue : report.issues) {
-        std::cout << issue.reason << '\\n';
+        std::cout << issue.reason << '\n';
 
         if (issue.page_number != 0) {
-            std::cout << "Page: " << issue.page_number << '\\n';
+            std::cout << "Page: " << issue.page_number << '\n';
         }
         if (issue.line_number != 0) {
-            std::cout << "Line: " << issue.line_number << '\\n';
+            std::cout << "Line: " << issue.line_number << '\n';
         }
         if (!issue.line_text.empty()) {
-            std::cout << "Text: " << issue.line_text << '\\n';
+            std::cout << "Text: " << issue.line_text << '\n';
         }
     }
 
     return 1;
 }
-\`\`\`
+```
 
 ### Validate a PDF file from disk
 
-\`\`\`cpp
+```cpp
 const rag::ValidationReport report =
     validator.validatePdfFile("document.pdf");
-\`\`\`
+```
 
 The file method reads the file as binary bytes and delegates to
-\`validatePdf()\`. It reports errors for an empty path, an inaccessible file,
+`validatePdf()`. It reports errors for an empty path, an inaccessible file,
 or a read failure.
 
 ## 9. PDF extraction behavior
@@ -440,15 +440,15 @@ For each extracted text box, the service:
 5. Records valid font sizes after rounding to the configured decimal precision.
 6. Updates the document-wide font-size frequency map.
 
-The resulting \`ExtractedPdfData\` includes:
+The resulting `ExtractedPdfData` includes:
 
 | Field | Description |
 |---|---|
-| \`page_count\` | Total pages reported by Poppler. |
-| \`lines\` | Extracted visual lines with page, line, text, word count, and font sizes. |
-| \`ordered_font_sizes\` | Font sizes in extraction order. |
-| \`font_size_frequency\` | Number of occurrences of each normalized font size. |
-| \`body_font_size\` | Most frequently occurring extracted font size. |
+| `page_count` | Total pages reported by Poppler. |
+| `lines` | Extracted visual lines with page, line, text, word count, and font sizes. |
+| `ordered_font_sizes` | Font sizes in extraction order. |
+| `font_size_frequency` | Number of occurrences of each normalized font size. |
+| `body_font_size` | Most frequently occurring extracted font size. |
 
 Page numbers and line numbers are one-based.
 
@@ -498,26 +498,26 @@ document.
 
 ### Debian/Ubuntu
 
-\`\`\`bash
+```bash
 sudo apt-get update
 sudo apt-get install cmake pkg-config libpoppler-cpp-dev
-\`\`\`
+```
 
 ### Configure and build
 
 Run these commands from the validator directory:
 
-\`\`\`bash
+```bash
 cmake -S . -B build
 cmake --build build
-\`\`\`
+```
 
-The CMake target is \`rag_validator\`. It compiles:
+The CMake target is `rag_validator`. It compiles:
 
-- \`validator_service.cpp\`
-- \`page_limit_validator.cpp\`
-- \`font_size_validator.cpp\`
-- \`heading_level_validator.cpp\`
+- `validator_service.cpp`
+- `page_limit_validator.cpp`
+- `font_size_validator.cpp`
+- `heading_level_validator.cpp`
 
 ## 12. Current scope and future extensions
 
