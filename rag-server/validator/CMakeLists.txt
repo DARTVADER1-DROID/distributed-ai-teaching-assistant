@@ -8,6 +8,7 @@ pkg_check_modules(POPPLER REQUIRED IMPORTED_TARGET poppler)
 
 add_library(rag_validator
     validator_service.cpp
+    pdf_font_size_extractor.cpp
     font_size_validator.cpp
     heading_level_validator.cpp
 )
