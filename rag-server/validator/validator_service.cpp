@@ -193,6 +193,15 @@ ValidationReport ValidatorService::validatePdf(
     );
 
     if (!extraction_result.is_valid) {
+        // A valid PDF can still have a known page count when text/font
+        // extraction fails (for example, a scanned PDF). Run page validation
+        // whenever that count is available, then report the extraction issue.
+        if (extracted_data.page_count > 0) {
+            report.append(
+                page_limit_validator_.validate(extracted_data.page_count)
+            );
+        }
+
         report.addIssue({
             extraction_result.reason,
             extraction_result.page_number
