@@ -46,7 +46,8 @@ bool belongsToLine(
 ValidatorService::ValidatorService(ValidatorConfig config)
     : config_(config),
       font_size_validator_(config),
-      heading_level_validator_(std::move(config)) {}
+      heading_level_validator_(config),
+      page_limit_validator_(std::move(config)) {}
 
 ValidationResult ValidatorService::extractPdfData(
     const std::vector<std::uint8_t>& pdf_data,
@@ -83,6 +84,8 @@ ValidationResult ValidatorService::extractPdfData(
     if (document->pages() <= 0) {
         return {false, "PDF contains no pages."};
     }
+
+    extracted_data.page_count = static_cast<std::size_t>(document->pages());
 
     const double precision_scale = std::pow(10.0, precision_decimal_places);
 
@@ -196,6 +199,9 @@ ValidationReport ValidatorService::validatePdf(
         });
         return report;
     }
+
+    // Run every independent validation stage and aggregate all rule breaks.
+    report.append(page_limit_validator_.validate(extracted_data.page_count));
 
     const auto font_report = font_size_validator_.validate(extracted_data);
     report.append(font_report);
