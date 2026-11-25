@@ -3,8 +3,8 @@
 #include <cmath>
 #include <limits>
 #include <map>
-#include <sstream>
 #include <set>
+#include <sstream>
 #include <string>
 #include <utility>
 
@@ -44,7 +44,6 @@ ValidationReport FontSizeValidator::validateConfiguration() const {
 
     if (config_.heading_font_sizes.empty()) {
         report.addIssue({"Configuration has no heading font sizes."});
-        return report;
     }
 
     for (const auto& [level, size] : config_.heading_font_sizes) {
