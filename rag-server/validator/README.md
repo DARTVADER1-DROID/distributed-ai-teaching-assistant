@@ -1,8 +1,8 @@
-# PDF Heading Validator
+# PDF Heading and Paragraph Font Validator
 
 A small C++17 service that accepts raw PDF bytes, extracts selectable text and
-font metadata, and runs independent heading validators. Every detected rule
-violation is collected into one report.
+font metadata, and validates heading and paragraph font sizes plus heading
+hierarchy. Every detected rule violation is collected into one report.
 
 ## Default heading sizes
 
@@ -22,7 +22,8 @@ The accepted font-size deviation is +/- 0.5 pt.
 - `ValidatorService`: owns PDF parsing and extraction. It creates the shared
   `ExtractedPdfData` and coordinates the validators.
 - `FontSizeValidator`: validates heading candidates against the configured
-  font-size scale.
+  H1-H6 font-size scale and checks non-heading paragraph/body-text lines against
+  the detected body-font baseline.
 - `HeadingLevelValidator`: derives the heading-level sequence and checks
   its traversal.
 - `ExtractedPdfData`: a data structure containing extracted lines, font
@@ -104,6 +105,7 @@ config.heading_font_sizes = {
 };
 config.heading_font_size_tolerance_points = 0.75;
 config.body_font_size_tolerance_points = 0.4;
+config.paragraph_font_size_tolerance_points = 0.5;
 config.font_size_precision_decimal_places = 2;
 
 rag::ValidatorService validator(config);
@@ -156,7 +158,11 @@ cmake --build build
 
 Poppler supplies text boxes and font sizes, not guaranteed semantic headings.
 The current heuristic treats the most frequent font size as body text and
-larger sizes matching the configured scale as heading candidates. Large
+larger sizes as heading candidates. Lines without a larger-than-body font size
+are treated as paragraph/body-text candidates and their font sizes are compared
+with the detected body baseline using the configured paragraph tolerance.
+This is not semantic paragraph detection: captions, footnotes, list items, and
+other non-heading text can be treated as paragraph candidates. Large
 non-heading text (such as figure titles) may be misclassified, and a heading
 that uses the body font size cannot be distinguished by size alone. Scanned
 PDFs or PDFs containing only outlined text have no extractable font metadata
