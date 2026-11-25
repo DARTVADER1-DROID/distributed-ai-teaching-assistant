@@ -1,16 +1,18 @@
 #pragma once
 
-#include "validation_result.hpp"
-
-#include <vector>
+#include "config/validator_config.hpp"
+#include "pdf_font_size_extractor.hpp"
 
 namespace rag {
 
 class HeadingLevelValidator {
 public:
-    ValidationResult validate(
-        const std::vector<int>& heading_levels
-    ) const;
+    explicit HeadingLevelValidator(ValidatorConfig config = {});
+
+    ValidationResult validate(const ExtractedPdfData& extracted_data) const;
+
+private:
+    ValidatorConfig config_;
 };
 
 } // namespace rag
