@@ -21,6 +21,7 @@ struct ValidationIssue {
 // Complete outcome returned by validators and ValidatorService.
 struct ValidationReport {
     std::vector<ValidationIssue> issues;
+    bool configuration_valid = true;
 
     bool isValid() const noexcept {
         return issues.empty();
@@ -32,6 +33,7 @@ struct ValidationReport {
 
     void append(const ValidationReport& other) {
         issues.insert(issues.end(), other.issues.begin(), other.issues.end());
+        configuration_valid = configuration_valid && other.configuration_valid;
     }
 };
 
