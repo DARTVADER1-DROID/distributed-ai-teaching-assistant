@@ -57,8 +57,10 @@ ValidationReport
 ```
 
 The service returns all detected violations. It runs both validators even if
-the first one finds issues. Both validators receive the same extracted data;
-the PDF is not parsed a second time.
+the first one finds document rule violations. If the shared configuration is
+invalid, it reports those configuration issues and skips heading traversal,
+which depends on that configuration. Both validators use the same extracted
+data; the PDF is not parsed a second time.
 
 ## Validation report and error details
 
