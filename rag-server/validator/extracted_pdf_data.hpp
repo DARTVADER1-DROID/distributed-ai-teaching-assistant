@@ -16,6 +16,7 @@ struct ExtractedPdfLine {
 };
 
 struct ExtractedPdfData {
+    std::size_t page_count = 0;
     std::vector<ExtractedPdfLine> lines;
     std::vector<double> ordered_font_sizes;
     std::map<double, std::size_t> font_size_frequency;
