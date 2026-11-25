@@ -2,6 +2,7 @@
 
 #include <cmath>
 #include <limits>
+#include <map>
 #include <sstream>
 #include <string>
 #include <utility>
@@ -80,7 +81,6 @@ ValidationResult FontSizeValidator::validate(
 
     struct DetectedSize {
         double font_size;
-        const ExtractedPdfLine* line;
     };
 
     std::map<int, DetectedSize> detected_heading_sizes;
@@ -125,7 +125,7 @@ ValidationResult FontSizeValidator::validate(
                 );
             }
 
-            detected_heading_sizes[matched_level] = {font_size, &line};
+            detected_heading_sizes[matched_level] = {font_size};
         }
     }
 
