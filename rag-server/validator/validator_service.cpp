@@ -4,6 +4,19 @@
 
 namespace rag {
 
+const std::map<int, double>& ValidatorService::defaultHeadingFontSizes() {
+    static const std::map<int, double> default_sizes{
+        {1, 24.0},
+        {2, 20.0},
+        {3, 18.0},
+        {4, 16.0},
+        {5, 14.0},
+        {6, 12.0}
+    };
+
+    return default_sizes;
+}
+
 bool ValidatorService::hasConsistentHeadingFontSizes(
     const std::map<int, double>& heading_font_sizes
 ) const {
@@ -11,21 +24,23 @@ bool ValidatorService::hasConsistentHeadingFontSizes(
         return false;
     }
 
-    double previous_font_size = 0.0;
-    bool is_first_heading = true;
+    const auto& default_sizes = defaultHeadingFontSizes();
 
-    for (const auto& [heading_level, font_size] : heading_font_sizes) {
+    for (const auto& [heading_level, actual_font_size] : heading_font_sizes) {
         if (heading_level < 1 || heading_level > 6 ||
-            !std::isfinite(font_size) || font_size <= 0.0) {
+            !std::isfinite(actual_font_size) || actual_font_size <= 0.0) {
             return false;
         }
 
-        if (!is_first_heading && font_size >= previous_font_size) {
+        const auto expected = default_sizes.find(heading_level);
+        if (expected == default_sizes.end()) {
             return false;
         }
 
-        previous_font_size = font_size;
-        is_first_heading = false;
+        if (std::fabs(actual_font_size - expected->second) >
+            FONT_SIZE_TOLERANCE_POINTS) {
+            return false;
+        }
     }
 
     return true;
