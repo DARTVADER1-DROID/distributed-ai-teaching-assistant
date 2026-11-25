@@ -15,11 +15,11 @@ class ValidatorService {
 public:
     explicit ValidatorService(ValidatorConfig config = {});
 
-    ValidationResult validatePdf(
+    ValidationReport validatePdf(
         const std::vector<std::uint8_t>& pdf_data
     ) const;
 
-    ValidationResult validatePdfFile(
+    ValidationReport validatePdfFile(
         const std::string& pdf_file_path
     ) const;
 
