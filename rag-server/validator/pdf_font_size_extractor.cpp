@@ -96,7 +96,8 @@ ValidationResult PdfFontSizeExtractor::extract(
         double current_line_height = 0.0;
 
         for (const auto& text_box : text_boxes) {
-            const std::string word = text_box.text().to_utf8();
+            const auto utf8_text = text_box.text().to_utf8();
+            const std::string word(utf8_text.begin(), utf8_text.end());
             if (word.empty()) {
                 continue;
             }
