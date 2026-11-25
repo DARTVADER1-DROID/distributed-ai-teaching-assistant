@@ -3,6 +3,7 @@
 #include "config/validator_config.hpp"
 #include "font_size_validator.hpp"
 #include "heading_level_validator.hpp"
+#include "page_limit_validator.hpp"
 #include "validation_result.hpp"
 #include "extracted_pdf_data.hpp"
 
@@ -34,6 +35,7 @@ private:
     ValidatorConfig config_;
     FontSizeValidator font_size_validator_;
     HeadingLevelValidator heading_level_validator_;
+    PageLimitValidator page_limit_validator_;
 };
 
 } // namespace rag
