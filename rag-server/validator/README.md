@@ -1,7 +1,7 @@
 # PDF Heading Validator
 
-A small C++17 service that parses PDF text metadata and validates heading font
-sizes and heading-level traversal.
+A small C++17 service that extracts PDF font metadata once and runs independent
+heading validators against the shared extracted data.
 
 ## Default heading sizes
 
@@ -16,18 +16,40 @@ sizes and heading-level traversal.
 
 The accepted font-size deviation is +/- 0.5 pt.
 
-## Structure
+## Responsibilities
 
-- `validator_service`: accepts PDF bytes or a file path, extracts font metadata,
-  and coordinates the validation sequence.
-- `font_size_validator`: validates configuration and checks each detected
-  heading level against its configured font size.
-- `heading_level_validator`: checks the order of heading levels.
-- `validation_result.hpp`: shared result type used by all validators.
+- `PdfFontSizeExtractor`: parses the PDF once and returns `ExtractedPdfData`,
+  containing ordered font sizes, font-size frequencies, and the most frequent
+  font size used as the body-text baseline.
+- `FontSizeValidator`: receives `ExtractedPdfData` and validates heading
+  candidates against the configured font-size scale.
+- `HeadingLevelValidator`: receives the same `ExtractedPdfData`, derives the
+  heading-level sequence, and checks its traversal.
+- `ValidatorService`: coordinates extraction and validation only. It does not
+  parse PDF internals or implement either validation rule.
 
-The service runs the checks sequentially: font-size validation first, followed
-by heading-level traversal validation. The individual validators can also be
-used independently.
+## Validation flow
+
+```text
+PDF bytes
+   |
+   v
+PdfFontSizeExtractor
+   |
+   | ExtractedPdfData (one extraction)
+   v
+FontSizeValidator
+   |
+   | valid
+   v
+HeadingLevelValidator
+   |
+   v
+ValidationResult
+```
+
+The service stops and returns the first failure. Both validators receive the
+same extracted data; the PDF is not parsed a second time.
 
 ## Configuration
 
@@ -50,20 +72,11 @@ config.font_size_precision_decimal_places = 2;
 rag::ValidatorService validator(config);
 ```
 
-Invalid configuration values are rejected before PDF validation. Missing
-heading levels are allowed. Each validator receives its own copy of the
-configuration values it needs.
-
 ## Heading-level traversal rule
 
 Adjacent headings may stay at the same level or move exactly one level up or
 down. For example, H1 -> H2 and H2 -> H1 are valid; H1 -> H3 is invalid.
 Heading levels must be in the H1-H6 range.
-
-```cpp
-rag::HeadingLevelValidator traversal_validator;
-const auto result = traversal_validator.validate({1, 2, 2, 3, 2, 1});
-```
 
 ## Usage
 
@@ -86,10 +99,6 @@ Or validate a PDF stored on disk:
 ```cpp
 const auto result = validator.validatePdfFile("document.pdf");
 ```
-
-The service also retains the `hasConsistentHeadingFontSizes` and
-`hasValidHeadingLevelTraversal` delegate methods for callers using the
-previous interface.
 
 ## Dependency and build
 
@@ -114,6 +123,4 @@ PDFs or PDFs containing only outlined text have no extractable font metadata
 and are rejected.
 
 Text boxes are processed in Poppler's returned order; complex multi-column
-layouts may not correspond to a reader's intended document order. Future
-improvements could use line layout, boldness, numbering patterns, and PDF
-structure tags.
+layouts may not correspond to a reader's intended document order.
