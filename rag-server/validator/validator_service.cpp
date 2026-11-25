@@ -109,6 +109,43 @@ ValidationResult ValidatorService::hasConsistentHeadingFontSizes(
     return {true, ""};
 }
 
+ValidationResult ValidatorService::hasValidHeadingLevelTraversal(
+    const std::vector<int>& heading_levels
+) const {
+    if (heading_levels.empty()) {
+        return {false, "No heading levels were provided for traversal validation."};
+    }
+
+    for (std::size_t index = 0; index < heading_levels.size(); ++index) {
+        const int current_level = heading_levels[index];
+        if (current_level < 1 || current_level > 6) {
+            return {
+                false,
+                "Invalid heading level at position " + std::to_string(index + 1) +
+                    ": H" + std::to_string(current_level) + "; expected H1-H6."
+            };
+        }
+
+        if (index == 0) {
+            continue;
+        }
+
+        const int previous_level = heading_levels[index - 1];
+        if (std::abs(current_level - previous_level) > 1) {
+            return {
+                false,
+                "Invalid heading level transition at position " +
+                    std::to_string(index) + " to " + std::to_string(index + 1) +
+                    ": H" + std::to_string(previous_level) + " -> H" +
+                    std::to_string(current_level) +
+                    ". Heading levels may change by only one level at a time."
+            };
+        }
+    }
+
+    return {true, ""};
+}
+
 ValidationResult ValidatorService::validatePdf(
     const std::vector<std::uint8_t>& pdf_data
 ) const {
@@ -178,7 +215,7 @@ ValidationResult ValidatorService::extractAndValidateHeadingFontSizes(
 
     // Count extracted word font sizes. The most frequent size is treated as
     // the document's body-text size; larger sizes are heading candidates.
-    std::map<double, std::size_t> font_size_frequency;
+    std::map<double, std::size_t> font_size_frequency;\n    std::vector<double> ordered_font_sizes;
 
     for (int page_index = 0; page_index < document->pages(); ++page_index) {
         std::unique_ptr<poppler::page> page(document->create_page(page_index));
@@ -205,7 +242,7 @@ ValidationResult ValidatorService::extractAndValidateHeadingFontSizes(
                 std::pow(10.0, config_.font_size_precision_decimal_places);
             const double normalized_size =
                 std::round(font_size * precision_scale) / precision_scale;
-            ++font_size_frequency[normalized_size];
+            ++font_size_frequency[normalized_size];\n            ordered_font_sizes.push_back(normalized_size);
         }
     }
 
@@ -292,6 +329,36 @@ ValidationResult ValidatorService::extractAndValidateHeadingFontSizes(
             "The PDF may contain only body text, or its headings may use "
             "the same size as the body text."
         };
+    }
+
+    // Reconstruct heading-level order from the extracted text sequence.
+    // Font-size-based classification is heuristic; text boxes are processed
+    // in the order returned by Poppler for each page.
+    std::vector<int> detected_heading_levels;
+    for (const double font_size : ordered_font_sizes) {
+        if (font_size <= body_font_size + config_.body_font_size_tolerance_points) {
+            continue;
+        }
+
+        int matched_level = 0;
+        double smallest_difference = std::numeric_limits<double>::max();
+        for (const auto& [heading_level, expected_size] : defaults) {
+            const double difference = std::fabs(font_size - expected_size);
+            if (difference < smallest_difference) {
+                smallest_difference = difference;
+                matched_level = heading_level;
+            }
+        }
+
+        if (smallest_difference <= config_.heading_font_size_tolerance_points) {
+            detected_heading_levels.push_back(matched_level);
+        }
+    }
+
+    const auto traversal_result =
+        hasValidHeadingLevelTraversal(detected_heading_levels);
+    if (!traversal_result.is_valid) {
+        return traversal_result;
     }
 
     return hasConsistentHeadingFontSizes(detected_heading_sizes);
