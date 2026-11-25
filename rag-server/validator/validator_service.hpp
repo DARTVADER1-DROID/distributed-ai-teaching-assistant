@@ -24,6 +24,12 @@ public:
         const std::map<int, double>& heading_font_sizes
     ) const;
 
+    // Validate heading levels in document order. Adjacent headings may stay
+    // at the same level or move exactly one level up/down (e.g. H1 -> H2).
+    ValidationResult hasValidHeadingLevelTraversal(
+        const std::vector<int>& heading_levels
+    ) const;
+
     ValidationResult validatePdf(
         const std::vector<std::uint8_t>& pdf_data
     ) const;
