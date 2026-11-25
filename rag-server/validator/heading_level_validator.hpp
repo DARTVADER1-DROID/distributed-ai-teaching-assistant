@@ -9,7 +9,7 @@ class HeadingLevelValidator {
 public:
     explicit HeadingLevelValidator(ValidatorConfig config = {});
 
-    ValidationResult validate(const ExtractedPdfData& extracted_data) const;
+    ValidationReport validate(const ExtractedPdfData& extracted_data) const;
 
 private:
     ValidatorConfig config_;
