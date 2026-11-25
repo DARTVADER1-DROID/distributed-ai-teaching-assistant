@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <map>
 
 namespace rag {
@@ -26,6 +27,12 @@ struct ValidatorConfig {
     // Maximum allowed difference between paragraph text and the detected
     // body-font baseline.
     double paragraph_font_size_tolerance_points = 0.5;
+
+    // Minimum number of pages required in an input PDF.
+    std::size_t minimum_pages = 1;
+
+    // Maximum number of pages allowed. Zero disables the upper limit.
+    std::size_t maximum_pages = 0;
 
     // Decimal places retained when normalizing font sizes extracted by Poppler.
     int font_size_precision_decimal_places = 2;
