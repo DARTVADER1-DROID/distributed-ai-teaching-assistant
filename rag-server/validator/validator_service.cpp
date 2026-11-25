@@ -59,7 +59,12 @@ ValidationResult ValidatorService::hasConsistentHeadingFontSizes(
                 " has a font size that must be greater than zero."};
         }
 
-        const double expected_font_size = default_sizes.at(heading_level);
+        const auto expected = default_sizes.find(heading_level);
+        if (expected == default_sizes.end()) {
+            return {false, "No expected font size is configured for H" +
+                std::to_string(heading_level) + "."};
+        }
+        const double expected_font_size = expected->second;
         if (std::fabs(actual_font_size - expected_font_size) >
             FONT_SIZE_TOLERANCE_POINTS) {
             return {
