@@ -115,7 +115,6 @@ ValidationReport FontSizeValidator::validate(
     }
 
     std::map<int, double> detected_heading_sizes;
-    bool paragraph_text_found = false;
 
     for (const auto& line : extracted_data.lines) {
         if (line.font_sizes.empty() || line.text.empty()) {
@@ -198,7 +197,6 @@ ValidationReport FontSizeValidator::validate(
 
         // Non-heading lines are treated as paragraph/body-text candidates.
         // Compare each distinct size with the document's detected body baseline.
-        paragraph_text_found = true;
         for (const double font_size : line_font_sizes) {
             const double difference =
                 std::fabs(font_size - extracted_data.body_font_size);
