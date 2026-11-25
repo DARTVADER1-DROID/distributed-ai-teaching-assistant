@@ -33,7 +33,6 @@ bool belongsToLine(
     double line_center,
     double line_height
 ) {
-    (void)line;
     const double center = verticalCenter(bounds);
     const double tolerance = std::max(2.0, std::min(bounds.height(), line_height) * 0.5);
     return std::fabs(center - line_center) <= tolerance;
