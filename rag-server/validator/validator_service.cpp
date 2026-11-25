@@ -215,7 +215,8 @@ ValidationResult ValidatorService::extractAndValidateHeadingFontSizes(
 
     // Count extracted word font sizes. The most frequent size is treated as
     // the document's body-text size; larger sizes are heading candidates.
-    std::map<double, std::size_t> font_size_frequency;\n    std::vector<double> ordered_font_sizes;
+    std::map<double, std::size_t> font_size_frequency;
+    std::vector<double> ordered_font_sizes;
 
     for (int page_index = 0; page_index < document->pages(); ++page_index) {
         std::unique_ptr<poppler::page> page(document->create_page(page_index));
@@ -242,7 +243,8 @@ ValidationResult ValidatorService::extractAndValidateHeadingFontSizes(
                 std::pow(10.0, config_.font_size_precision_decimal_places);
             const double normalized_size =
                 std::round(font_size * precision_scale) / precision_scale;
-            ++font_size_frequency[normalized_size];\n            ordered_font_sizes.push_back(normalized_size);
+            ++font_size_frequency[normalized_size];
+            ordered_font_sizes.push_back(normalized_size);
         }
     }
 
