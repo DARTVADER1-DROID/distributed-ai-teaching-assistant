@@ -45,7 +45,7 @@ void printReport(const rag::ValidationReport& report) {
 int main(int argc, char* argv[]) {
     if (argc != 2) {
         printUsage(argv[0]);
-        return EXIT_FAILURE;
+        return 2;
     }
 
     const std::string pdf_file_path = argv[1];
