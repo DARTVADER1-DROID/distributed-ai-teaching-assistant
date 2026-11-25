@@ -1,7 +1,8 @@
 # PDF Heading Validator
 
 A small C++17 service that extracts PDF text and font metadata once and runs
-independent heading validators against the shared extracted data.
+independent heading validators against the shared extracted data. Every detected
+rule violation is collected into one report.
 
 ## Default heading sizes
 
@@ -55,18 +56,23 @@ HeadingLevelValidator
 ValidationResult
 ```
 
-The service stops and returns the first failure. Both validators receive the
-same extracted data; the PDF is not parsed a second time.
+The service returns all detected violations. It runs both validators even if
+the first one finds issues. Both validators receive the same extracted data;
+the PDF is not parsed a second time.
 
-## Error details
+## Validation report and error details
 
-`ValidationResult` contains:
+`ValidatorService` returns a `ValidationReport`. Its `issues` vector contains
+every detected violation from both validators. An empty vector means success;
+use `report.isValid()` to check the overall result.
 
-- `reason`: human-readable validation failure.
+Each `ValidationIssue` contains:
+
+- `reason`: human-readable rule violation.
 - `page_number`: one-based PDF page number, or 0 when unavailable.
 - `line_number`: one-based extracted line number within that page, or 0 when
   unavailable.
-- `line_text`: extracted text for the line that caused the failure.
+- `line_text`: extracted text for the line that caused the violation.
 - `word_count`: whitespace-delimited word count for that extracted line.
 
 The line grouping is inferred from Poppler text-box bounding boxes. PDFs do not
@@ -114,10 +120,12 @@ Pass uploaded PDF bytes directly:
 rag::ValidatorService validator;
 std::vector<std::uint8_t> pdf_bytes = /* uploaded PDF bytes */;
 
-const rag::ValidationResult result = validator.validatePdf(pdf_bytes);
-if (!result.is_valid) {
-    // Use result.reason, result.page_number, result.line_number,
-    // result.line_text, and result.word_count.
+const rag::ValidationReport report = validator.validatePdf(pdf_bytes);
+if (!report.isValid()) {
+    for (const auto& issue : report.issues) {
+        // Use issue.reason, issue.page_number, issue.line_number,
+        // issue.line_text, and issue.word_count.
+    }
 }
 ```
 
