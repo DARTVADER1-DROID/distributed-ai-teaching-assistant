@@ -13,10 +13,12 @@ ValidatorService::ValidatorService(ValidatorConfig config)
       font_size_validator_(config),
       heading_level_validator_(std::move(config)) {}
 
-ValidationResult ValidatorService::validatePdf(
+ValidationReport ValidatorService::validatePdf(
     const std::vector<std::uint8_t>& pdf_data
 ) const {
+    ValidationReport report;
     ExtractedPdfData extracted_data;
+
     const auto extraction_result = PdfFontSizeExtractor::extract(
         pdf_data,
         extracted_data,
@@ -24,27 +26,34 @@ ValidationResult ValidatorService::validatePdf(
     );
 
     if (!extraction_result.is_valid) {
-        return extraction_result;
+        report.addIssue({
+            extraction_result.reason,
+            extraction_result.page_number
+        });
+        return report;
     }
 
-    const auto font_result = font_size_validator_.validate(extracted_data);
-    if (!font_result.is_valid) {
-        return font_result;
-    }
+    // Run both validators even when the first one finds rule violations.
+    report.append(font_size_validator_.validate(extracted_data));
+    report.append(heading_level_validator_.validate(extracted_data));
 
-    return heading_level_validator_.validate(extracted_data);
+    return report;
 }
 
-ValidationResult ValidatorService::validatePdfFile(
+ValidationReport ValidatorService::validatePdfFile(
     const std::string& pdf_file_path
 ) const {
+    ValidationReport report;
+
     if (pdf_file_path.empty()) {
-        return {false, "PDF file path must not be empty."};
+        report.addIssue({"PDF file path must not be empty."});
+        return report;
     }
 
     std::ifstream pdf_file(pdf_file_path, std::ios::binary);
     if (!pdf_file) {
-        return {false, "Unable to open PDF file: " + pdf_file_path};
+        report.addIssue({"Unable to open PDF file: " + pdf_file_path});
+        return report;
     }
 
     std::vector<std::uint8_t> pdf_data(
@@ -53,7 +62,8 @@ ValidationResult ValidatorService::validatePdfFile(
     );
 
     if (pdf_file.bad()) {
-        return {false, "Failed while reading PDF file: " + pdf_file_path};
+        report.addIssue({"Failed while reading PDF file: " + pdf_file_path});
+        return report;
     }
 
     return validatePdf(pdf_data);
