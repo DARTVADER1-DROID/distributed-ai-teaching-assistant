@@ -1,0 +1,59 @@
+name: Build BGE-M3 Embedding Service (Windows)
+
+on:
+  push:
+    paths:
+      - "rag-server/embedding-service/**"
+      - ".github/workflows/embedding-service-windows.yml"
+  pull_request:
+    paths:
+      - "rag-server/embedding-service/**"
+      - ".github/workflows/embedding-service-windows.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust build toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Configure embedding service
+        run: >-
+          cmake -S rag-server/embedding-service
+          -B rag-server/embedding-service/build
+          -A x64
+          -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build embedding service
+        run: cmake --build rag-server/embedding-service/build --config Release --parallel
+
+      - name: Verify build outputs
+        shell: pwsh
+        run: |
+          $library = "rag-server/embedding-service/build/Release/rag_embedding_service.lib"
+          $runtime = "rag-server/embedding-service/build/_deps/onnxruntime/onnxruntime-win-x64-1.23.2/lib/onnxruntime.dll"
+
+          if (!(Test-Path $library)) {
+            throw "Embedding service library was not produced: $library"
+          }
+          if (!(Test-Path $runtime)) {
+            throw "ONNX Runtime DLL was not found: $runtime"
+          }
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: rag-embedding-service-windows-x64
+          path: |
+            rag-server/embedding-service/build/Release/rag_embedding_service.lib
+            rag-server/embedding-service/build/_deps/onnxruntime/onnxruntime-win-x64-1.23.2/lib/onnxruntime.dll
+          if-no-files-found: error
+          retention-days: 14
