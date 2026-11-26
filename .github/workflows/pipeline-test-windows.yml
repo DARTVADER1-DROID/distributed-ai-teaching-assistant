@@ -1,4 +1,4 @@
-name: Build Integrated RAG Embedding Test (Windows)
+name: Build RAG Pipeline Test (Windows)
 
 on:
   push:
@@ -8,8 +8,6 @@ on:
       - "rag-server/chunker/**"
       - "rag-server/config/**"
       - "rag-server/pipeline-test/**"
-      - "rag-server/pipeline-test-host/**"
-      - "rag-server/embedding-service/**"
       - "rag-server/vcpkg.json"
       - ".github/workflows/pipeline-test-windows.yml"
   pull_request:
@@ -19,8 +17,6 @@ on:
       - "rag-server/chunker/**"
       - "rag-server/config/**"
       - "rag-server/pipeline-test/**"
-      - "rag-server/pipeline-test-host/**"
-      - "rag-server/embedding-service/**"
       - "rag-server/vcpkg.json"
       - ".github/workflows/pipeline-test-windows.yml"
   workflow_dispatch:
@@ -30,7 +26,6 @@ permissions:
 
 env:
   VCPKG_DISABLE_METRICS: 1
-  DOTNET_NOLOGO: true
 
 jobs:
   build-windows:
@@ -45,85 +40,61 @@ jobs:
         run: |
           git clone https://github.com/microsoft/vcpkg.git C:/vcpkg-rag
           if ($LASTEXITCODE -ne 0) { throw "Could not clone vcpkg." }
+
           git -C C:/vcpkg-rag checkout e6d62cc9ce8f8d9687df14521118f2ec3c10ee6a
           if ($LASTEXITCODE -ne 0) { throw "Could not check out the pinned vcpkg baseline." }
+
           & C:/vcpkg-rag/bootstrap-vcpkg.bat -disableMetrics
           if ($LASTEXITCODE -ne 0) { throw "vcpkg bootstrap failed." }
 
-      - name: Configure C++ pipeline
+      - name: Configure MSVC x64 build and install dependencies
         shell: pwsh
         run: |
-          cmake -S rag-server/pipeline-test -B C:/bld/rag-pipeline -A x64 -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg-rag/scripts/buildsystems/vcpkg.cmake -DVCPKG_MANIFEST_DIR="$env:GITHUB_WORKSPACE/rag-server" -DVCPKG_INSTALLED_DIR=C:/vcpkg-rag_installed -DVCPKG_TARGET_TRIPLET=x64-windows -DVCPKG_MANIFEST_INSTALL=ON
-          if ($LASTEXITCODE -ne 0) { throw "CMake configuration or vcpkg dependency installation failed." }
+          cmake -S rag-server/pipeline-test -B C:/bld/rag-pipeline -G "Visual Studio 17 2022" -A x64 -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg-rag/scripts/buildsystems/vcpkg.cmake -DVCPKG_MANIFEST_DIR="$env:GITHUB_WORKSPACE/rag-server" -DVCPKG_INSTALLED_DIR=C:/vcpkg-rag_installed -DVCPKG_TARGET_TRIPLET=x64-windows -DVCPKG_MANIFEST_INSTALL=ON
+          if ($LASTEXITCODE -ne 0) { throw "MSVC CMake configuration or vcpkg dependency installation failed." }
 
-      - name: Build native C++ pipeline
+      - name: Build executable
         shell: pwsh
         run: |
           cmake --build C:/bld/rag-pipeline --config Release --parallel
-          if ($LASTEXITCODE -ne 0) { throw "Native RAG pipeline compilation failed." }
+          if ($LASTEXITCODE -ne 0) { throw "RAG pipeline compilation failed." }
 
-      - name: Set up .NET 10
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: "10.0.x"
-
-      - name: Restore and publish integrated C# host
-        shell: pwsh
-        run: |
-          dotnet restore rag-server/pipeline-test-host/RagPipelineTestHost.csproj -r win-x64
-          if ($LASTEXITCODE -ne 0) { throw "Integrated host restore failed." }
-          dotnet publish rag-server/pipeline-test-host/RagPipelineTestHost.csproj --configuration Release --runtime win-x64 --self-contained true --no-restore -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -o C:/bld/rag-host-publish
-          if ($LASTEXITCODE -ne 0) { throw "Integrated host publish failed." }
-
-      - name: Assemble runnable Windows x64 package
+      - name: Package runnable Windows test
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
+          $exe = "C:/bld/rag-pipeline/Release/rag_pipeline_test.exe"
           $output = "rag-server/pipeline-test/output"
-          $nativeExe = "C:/bld/rag-pipeline/Release/rag_pipeline_native.exe"
-          $hostExe = "C:/bld/rag-host-publish/rag_pipeline_test.exe"
           $vcpkgBin = "C:/vcpkg-rag_installed/x64-windows/bin"
 
-          if (!(Test-Path $nativeExe)) { throw "Native executable missing: $nativeExe" }
-          if (!(Test-Path $hostExe)) { throw "Integrated host executable missing: $hostExe" }
+          if (!(Test-Path $exe)) { throw "Pipeline executable was not produced: $exe" }
+          if (!(Test-Path $vcpkgBin)) { throw "vcpkg runtime directory was not found: $vcpkgBin" }
+
           if (Test-Path $output) { Remove-Item $output -Recurse -Force }
           New-Item -ItemType Directory -Path $output -Force | Out-Null
 
-          Get-ChildItem C:/bld/rag-host-publish -File | Copy-Item -Destination $output -Force
-          Copy-Item $nativeExe $output
+          Copy-Item $exe $output
           Get-ChildItem $vcpkgBin -Filter "*.dll" -File | Copy-Item -Destination $output -Force
 
           @"
-          Integrated RAG PDF + BGE-M3 Embedding Test (Windows x64)
+          RAG Validator + Extractor + Chunker Pipeline Test (Windows x64)
 
-          Usage:
+          Run from this extracted folder:
             .\rag_pipeline_test.exe "C:\full\path\to\document.pdf"
-            .\rag_pipeline_test.exe "C:\full\path\to\document.pdf" "C:\path\to\bge-m3"
 
-          Default model folder: .\models\bge-m3
-          Required files:
-            models\bge-m3\model_fp32.onnx
-            models\bge-m3\model_fp32.onnx.data
-            models\bge-m3\tokenizer_hf\tokenizer.json
+          Runtime DLLs required by this build are included beside the executable.
+          Chunk sizing currently uses a temporary UTF-8 code-point proxy.
+          The exact model tokenizer will be supplied by the C# application layer.
 
-          The package includes the C# host, native C++ pipeline, .NET runtime,
-          ONNX Runtime and tokenizer runtime assets, plus Poppler runtime DLLs.
-          The approximately 2.2 GB BGE-M3 model is intentionally not bundled.
-
-          Output:
-            <pdf-name>.embeddings.json beside the input PDF, containing chunk
-            metadata and all 1024-dimensional dense vectors.
-
-          Processing is local and offline after the model files are present.
+          This is a CI test package, not yet the final cross-platform installer.
           "@ | Set-Content "$output/README.txt" -Encoding UTF8
 
-          if (!(Test-Path "$output/rag_pipeline_test.exe")) { throw "Host package verification failed." }
-          if (!(Test-Path "$output/rag_pipeline_native.exe")) { throw "Native package verification failed." }
+          if (!(Test-Path "$output/rag_pipeline_test.exe")) { throw "Executable packaging failed." }
 
-      - name: Upload integrated Windows x64 package
+      - name: Upload runnable Windows package
         uses: actions/upload-artifact@v4
         with:
-          name: rag-pipeline-bge-m3-windows-x64
+          name: rag-pipeline-test-windows-x64
           path: rag-server/pipeline-test/output/
           if-no-files-found: error
           retention-days: 14
