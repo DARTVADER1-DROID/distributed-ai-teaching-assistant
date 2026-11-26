@@ -25,21 +25,26 @@ jobs:
       - name: Install Rust build toolchain
         uses: dtolnay/rust-toolchain@stable
 
+      # Rust procedural-macro linking under MSVC can exceed Windows path
+      # limits when Cargo's target directory is nested under the repository.
+      # Keep all generated build paths short and predictable.
       - name: Configure embedding service
-        run: >-
-          cmake -S rag-server/embedding-service
-          -B rag-server/embedding-service/build
-          -A x64
-          -DCMAKE_BUILD_TYPE=Release
+        shell: pwsh
+        run: |
+          cmake -S rag-server/embedding-service -B C:/bld -A x64 -DCMAKE_BUILD_TYPE=Release
+          if ($LASTEXITCODE -ne 0) { throw "CMake configuration failed." }
 
       - name: Build embedding service
-        run: cmake --build rag-server/embedding-service/build --config Release --parallel
+        shell: pwsh
+        run: |
+          cmake --build C:/bld --config Release --parallel
+          if ($LASTEXITCODE -ne 0) { throw "Embedding service compilation failed." }
 
       - name: Verify build outputs
         shell: pwsh
         run: |
-          $library = "rag-server/embedding-service/build/Release/rag_embedding_service.lib"
-          $runtime = "rag-server/embedding-service/build/_deps/onnxruntime/microsoft.ml.onnxruntime.1.32.0/runtimes/win-x64/native/onnxruntime.dll"
+          $library = "C:/bld/Release/rag_embedding_service.lib"
+          $runtime = "C:/bld/_deps/onnxruntime/microsoft.ml.onnxruntime.1.32.0/runtimes/win-x64/native/onnxruntime.dll"
 
           if (!(Test-Path $library)) {
             throw "Embedding service library was not produced: $library"
@@ -53,7 +58,7 @@ jobs:
         with:
           name: rag-embedding-service-windows-x64
           path: |
-            rag-server/embedding-service/build/Release/rag_embedding_service.lib
-            rag-server/embedding-service/build/_deps/onnxruntime/microsoft.ml.onnxruntime.1.32.0/runtimes/win-x64/native/onnxruntime.dll
+            C:/bld/Release/rag_embedding_service.lib
+            C:/bld/_deps/onnxruntime/microsoft.ml.onnxruntime.1.32.0/runtimes/win-x64/native/onnxruntime.dll
           if-no-files-found: error
           retention-days: 14
