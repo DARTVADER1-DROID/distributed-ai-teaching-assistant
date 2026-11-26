@@ -5,66 +5,74 @@ on:
     paths:
       - "rag-server/extractor/**"
       - "rag-server/config/**"
+      - "rag-server/vcpkg.json"
       - ".github/workflows/extractor-windows.yml"
   pull_request:
     paths:
       - "rag-server/extractor/**"
       - "rag-server/config/**"
+      - "rag-server/vcpkg.json"
       - ".github/workflows/extractor-windows.yml"
   workflow_dispatch:
 
 permissions:
   contents: read
 
+env:
+  VCPKG_DISABLE_METRICS: 1
+
 jobs:
   build-windows:
     runs-on: windows-latest
-    defaults:
-      run:
-        shell: msys2 {0}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Set up MSYS2 and install build dependencies
-        uses: msys2/setup-msys2@v2
-        with:
-          msystem: MINGW64
-          update: true
-          install: >-
-            mingw-w64-x86_64-toolchain
-            mingw-w64-x86_64-cmake
-            mingw-w64-x86_64-ninja
-            mingw-w64-x86_64-poppler
-            mingw-w64-x86_64-pkgconf
+      - name: Set up pinned vcpkg
+        shell: pwsh
+        run: |
+          git clone https://github.com/microsoft/vcpkg.git C:/vcpkg
+          if ($LASTEXITCODE -ne 0) { throw "Could not clone vcpkg." }
+          git -C C:/vcpkg checkout e6d62cc9ce8f8d9687df14521118f2ec3c10ee6a
+          if ($LASTEXITCODE -ne 0) { throw "Could not check out the pinned vcpkg baseline." }
+          & C:/vcpkg/bootstrap-vcpkg.bat -disableMetrics
+          if ($LASTEXITCODE -ne 0) { throw "vcpkg bootstrap failed." }
 
-      - name: Configure
-        run: cmake -S rag-server/extractor -B rag-server/extractor/build -G Ninja -DCMAKE_BUILD_TYPE=Release
+      - name: Configure MSVC x64 build and install dependencies
+        shell: pwsh
+        run: |
+          cmake -S rag-server/extractor -B C:/bld/rag-extractor -G "Visual Studio 17 2022" -A x64 -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake -DVCPKG_MANIFEST_DIR="$env:GITHUB_WORKSPACE/rag-server" -DVCPKG_INSTALLED_DIR=C:/vcpkg_installed -DVCPKG_TARGET_TRIPLET=x64-windows -DVCPKG_MANIFEST_INSTALL=ON
+          if ($LASTEXITCODE -ne 0) { throw "MSVC CMake configuration or vcpkg dependency installation failed." }
 
-      - name: Build
-        run: cmake --build rag-server/extractor/build --parallel
+      - name: Build extractor
+        shell: pwsh
+        run: |
+          cmake --build C:/bld/rag-extractor --config Release --parallel
+          if ($LASTEXITCODE -ne 0) { throw "Extractor compilation failed." }
 
       - name: Prepare C++ library package
+        shell: pwsh
         run: |
-          set -euo pipefail
-          library="rag-server/extractor/build/librag_extractor.a"
-          output="rag-server/extractor/output"
-          test -f "$library"
-          rm -rf "$output"
-          mkdir -p "$output/include/extractor" "$output/include/config" "$output/lib"
-          cp rag-server/extractor/extractor_service.hpp "$output/include/extractor/"
-          cp rag-server/config/document_format_config.hpp "$output/include/config/"
-          cp "$library" "$output/lib/"
-          cat > "$output/README-LIBRARY.txt" <<'EOF'
-          RAG PDF Extractor - Windows x64 C++ library
+          $ErrorActionPreference = "Stop"
+          $library = "C:/bld/rag-extractor/Release/rag_extractor.lib"
+          $output = "rag-server/extractor/output"
+          if (!(Test-Path $library)) { throw "Extractor library was not produced: $library" }
+          if (Test-Path $output) { Remove-Item $output -Recurse -Force }
+          New-Item -ItemType Directory -Path "$output/include/extractor", "$output/include/config", "$output/lib" -Force | Out-Null
+          Copy-Item rag-server/extractor/extractor_service.hpp "$output/include/extractor/"
+          Copy-Item rag-server/config/document_format_config.hpp "$output/include/config/"
+          Copy-Item $library "$output/lib/"
+          @"
+          RAG PDF Extractor - Windows x64 MSVC library
 
-          This package contains the compiled static library and public headers.
-          It is not a standalone executable. Link it into your C++ application
-          and also link the Poppler C++ and Poppler libraries.
-          EOF
-          test -s "$output/lib/librag_extractor.a"
-          test -f "$output/include/extractor/extractor_service.hpp"
-          test -f "$output/include/config/document_format_config.hpp"
+          This is a static MSVC library, not a standalone executable.
+          It was built with the pinned vcpkg Poppler dependency. Consumers
+          must use a compatible MSVC toolchain and link the matching Poppler
+          C++ library and its transitive dependencies.
+          "@ | Set-Content "$output/README-LIBRARY.txt" -Encoding UTF8
+          if (!(Test-Path "$output/lib/rag_extractor.lib")) { throw "Extractor packaging failed." }
+          if (!(Test-Path "$output/include/extractor/extractor_service.hpp")) { throw "Extractor headers were not packaged." }
+          if (!(Test-Path "$output/include/config/document_format_config.hpp")) { throw "Configuration headers were not packaged." }
 
       - name: Upload extractor library package
         uses: actions/upload-artifact@v4
