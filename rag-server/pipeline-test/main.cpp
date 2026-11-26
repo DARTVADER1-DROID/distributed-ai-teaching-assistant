@@ -1,9 +1,10 @@
 #include "validator_service.hpp"
 #include "extractor_service.hpp"
 #include "chunker_service.hpp"
+#include "embedding_service.hpp"
 
 #include <chrono>
-#include <cctype>
+#include <cmath>
 #include <cstdint>
 #include <fstream>
 #include <iomanip>
@@ -63,7 +64,7 @@ void printTimingReport(
         std::cout << "No processing stages were executed.\n";
     } else {
         for (const auto& timing : timings) {
-            std::cout << std::left << std::setw( 30 )
+            std::cout << std::left << std::setw(30)
                       << timing.name << std::right
                       << std::fixed << std::setprecision(3)
                       << toMilliseconds(timing.elapsed) << " ms\n";
@@ -71,31 +72,13 @@ void printTimingReport(
     }
 
     std::cout << "----------------------------------------\n"
-              << std::left << std::setw( 30 )
+              << std::left << std::setw(30)
               << "TOTAL PROGRAM TIME" << std::right
               << std::fixed << std::setprecision(3)
               << toMilliseconds(SteadyClock::now() - program_start)
               << " ms\n"
               << "========================================\n"
               << "Times use a monotonic high-resolution clock.\n";
-}
-
-// Temporary test-only tokenizer. It counts whitespace-separated tokens.
-// This is deliberately NOT presented as the BGE-M3 tokenizer.
-std::size_t countTestTokens(const std::string& text) {
-    std::size_t count = 0;
-    bool inside_token = false;
-
-    for (const unsigned char character : text) {
-        if (std::isspace(character)) {
-            inside_token = false;
-        } else if (!inside_token) {
-            ++count;
-            inside_token = true;
-        }
-    }
-
-    return count;
 }
 
 void printSourcePosition(std::size_t page_number, std::size_t line_number) {
@@ -166,28 +149,64 @@ void printHeadingPath(const std::vector<std::string>& heading_path) {
     }
 }
 
+double calculateL2Norm(const std::vector<float>& values) {
+    double squared_sum = 0.0;
+    for (const float value : values) {
+        squared_sum += static_cast<double>(value) * value;
+    }
+    return std::sqrt(squared_sum);
+}
+
+void printEmbeddingVector(const std::vector<float>& values) {
+    std::cout << "Dense vector values (" << values.size()
+              << " dimensions):\n";
+
+    constexpr std::size_t values_per_line = 8;
+    for (std::size_t i = 0; i < values.size(); ++i) {
+        if (i % values_per_line == 0) {
+            std::cout << "  [" << std::setw(4) << i << "] ";
+        }
+
+        std::cout << std::fixed << std::setprecision(6) << values[i];
+
+        if (i + 1 < values.size()) {
+            std::cout << ", ";
+        }
+        if ((i + 1) % values_per_line == 0 || i + 1 == values.size()) {
+            std::cout << '\n';
+        }
+    }
+}
+
 } // namespace
 
 int main(int argc, char* argv[]) {
     const auto program_start = SteadyClock::now();
     std::vector<StageTiming> timings;
 
-    if (argc != 2) {
+    if (argc != 4) {
         std::cerr << "Usage:\n"
-                  << "  rag_pipeline_test.exe <path-to-pdf>\n\n"
+                  << "  rag_pipeline_test.exe <path-to-pdf> "
+                     "<path-to-model.onnx> <path-to-tokenizer.json>\n\n"
                   << "Example:\n"
-                  << "  rag_pipeline_test.exe \"C:\\Users\\You\\Documents\\sample.pdf\"\n";
+                  << "  rag_pipeline_test.exe \"C:\\Users\\You\\Documents\\sample.pdf\" "
+                     "\"C:\\rag\\models\\bge-m3\\model.onnx\" "
+                     "\"C:\\rag\\models\\bge-m3\\tokenizer.json\"\n";
         printTimingReport(timings, program_start);
         return 2;
     }
 
     const std::string pdf_path = argv[1];
+    const std::string model_path = argv[2];
+    const std::string tokenizer_path = argv[3];
     std::vector<std::uint8_t> pdf_bytes;
 
     std::cout << "========================================\n"
-              << " RAG PDF VALIDATION + EXTRACTION + CHUNKING TEST\n"
+              << " RAG PDF VALIDATION + EXTRACTION + CHUNKING + EMBEDDING TEST\n"
               << "========================================\n"
-              << "Input: " << pdf_path << "\n\n";
+              << "PDF: " << pdf_path << '\n'
+              << "Model: " << model_path << '\n'
+              << "Tokenizer: " << tokenizer_path << "\n\n";
 
     const bool pdf_read = measureStage(timings, "PDF file read", [&] {
         return readPdf(pdf_path, pdf_bytes);
@@ -206,7 +225,7 @@ int main(int argc, char* argv[]) {
         validator = std::make_unique<rag::ValidatorService>(validator_config);
     });
 
-    std::cout << "[1/3] VALIDATION\n"
+    std::cout << "[1/4] VALIDATION\n"
               << "----------------------------------------\n";
 
     const rag::ValidationReport validation =
@@ -237,8 +256,8 @@ int main(int argc, char* argv[]) {
                 }
             }
 
-            std::cout << "\nExtraction and chunking were not started because "
-                         "validation failed.\n";
+            std::cout << "\nExtraction, chunking and embedding were not started "
+                         "because validation failed.\n";
         });
 
         printTimingReport(timings, program_start);
@@ -253,7 +272,7 @@ int main(int argc, char* argv[]) {
         extractor = std::make_unique<rag::ExtractorService>(format_config);
     });
 
-    std::cout << "[2/3] HIERARCHICAL EXTRACTION\n"
+    std::cout << "[2/4] HIERARCHICAL EXTRACTION\n"
               << "----------------------------------------\n";
 
     const rag::ExtractionResult extraction =
@@ -274,22 +293,55 @@ int main(int argc, char* argv[]) {
         printTree(extraction.document);
     });
 
-    rag::ChunkerConfig chunker_config;
-    const rag::TokenCounter test_tokenizer = countTestTokens;
-    std::unique_ptr<rag::ChunkerService> chunker;
+    rag::EmbeddingConfig embedding_config;
+    embedding_config.model_path = model_path;
+    embedding_config.tokenizer_path = tokenizer_path;
 
+    std::unique_ptr<rag::EmbeddingService> embedding_service;
+    measureStage(timings, "Embedding service construction", [&] {
+        embedding_service =
+            std::make_unique<rag::EmbeddingService>(embedding_config);
+    });
+
+    std::cout << "\n[3/4] BGE-M3 INITIALIZATION\n"
+              << "----------------------------------------\n";
+
+    const rag::EmbeddingOperationResult initialization =
+        measureStage(timings, "BGE-M3 model + tokenizer load", [&] {
+            return embedding_service->initialize();
+        });
+
+    if (!initialization.is_successful) {
+        std::cout << "RESULT: FAILED\n"
+                  << "Reason: " << initialization.error << '\n';
+        printTimingReport(timings, program_start);
+        return 1;
+    }
+
+    std::cout << "RESULT: PASSED\n"
+              << "Local model and tokenizer loaded successfully.\n"
+              << "Runtime mode: ONNX Runtime CPU\n"
+              << "Embedding dimensions: 1024\n"
+              << "Maximum sequence length: "
+              << embedding_config.max_sequence_length << " tokens\n\n";
+
+    rag::ChunkerConfig chunker_config;
+    const rag::TokenCounter bge_tokenizer = [&](const std::string& text) {
+        return embedding_service->countTokens(text);
+    };
+
+    std::unique_ptr<rag::ChunkerService> chunker;
     measureStage(timings, "Chunker initialization", [&] {
         chunker = std::make_unique<rag::ChunkerService>(
-            chunker_config, test_tokenizer
+            chunker_config, bge_tokenizer
         );
     });
 
-    std::cout << "\n[3/3] STRUCTURE-AWARE CHUNKING\n"
+    std::cout << "[4/4] STRUCTURE-AWARE CHUNKING + EMBEDDING\n"
               << "----------------------------------------\n"
               << "Configured maximum: " << chunker_config.max_chunk_tokens
-              << " test tokens\n"
-              << "Tokenizer: TEST ONLY (whitespace-separated tokens)\n"
-              << "Note: counts are not BGE-M3 token counts.\n\n";
+              << " BGE-M3 tokens\n"
+              << "Tokenizer: BGE-M3 tokenizer.json\n\n";
 
     const rag::ChunkingResult chunking =
         measureStage(timings, "Structure-aware chunking", [&] {
@@ -297,20 +349,25 @@ int main(int argc, char* argv[]) {
         });
 
     if (!chunking.is_successful) {
-        std::cout << "RESULT: FAILED\n"
+        std::cout << "CHUNKING RESULT: FAILED\n"
                   << "Reason: " << chunking.error << '\n';
         printTimingReport(timings, program_start);
         return 1;
     }
 
-    std::cout << "RESULT: PASSED\n"
+    std::cout << "CHUNKING RESULT: PASSED\n"
               << "Generated chunks: " << chunking.chunks.size() << "\n\n";
 
+    std::vector<std::size_t> chunk_token_counts;
     const bool token_limit_ok =
-        measureStage(timings, "Chunk token-limit verification", [&] {
+        measureStage(timings, "BGE token-limit verification", [&] {
+            chunk_token_counts.reserve(chunking.chunks.size());
             for (const auto& chunk : chunking.chunks) {
-                if (test_tokenizer(chunk.embedding_text) >
-                    chunker_config.max_chunk_tokens) {
+                const std::size_t token_count =
+                    embedding_service->countTokens(chunk.embedding_text);
+                chunk_token_counts.push_back(token_count);
+
+                if (token_count > chunker_config.max_chunk_tokens) {
                     return false;
                 }
             }
@@ -318,9 +375,9 @@ int main(int argc, char* argv[]) {
         });
 
     measureStage(timings, "Chunk result rendering", [&] {
-        for (const auto& chunk : chunking.chunks) {
-            const std::size_t token_count =
-                test_tokenizer(chunk.embedding_text);
+        for (std::size_t i = 0; i < chunking.chunks.size(); ++i) {
+            const auto& chunk = chunking.chunks[i];
+            const std::size_t token_count = chunk_token_counts[i];
 
             std::cout << "========================================\n"
                       << "CHUNK " << chunk.index << '\n'
@@ -328,7 +385,7 @@ int main(int argc, char* argv[]) {
                       << "Heading path: ";
             printHeadingPath(chunk.heading_path);
 
-            std::cout << "\nTest token count: " << token_count
+            std::cout << "\nBGE-M3 token count: " << token_count
                       << " / " << chunker_config.max_chunk_tokens
                       << (token_count <= chunker_config.max_chunk_tokens
                               ? " [OK]\n"
@@ -352,13 +409,78 @@ int main(int argc, char* argv[]) {
 
     if (!token_limit_ok) {
         std::cout << "CHUNKING CHECK: FAILED - a chunk exceeded the "
-                     "configured test-token limit.\n";
+                     "configured BGE-M3 token limit.\n";
         printTimingReport(timings, program_start);
         return 1;
     }
 
     std::cout << "CHUNKING CHECK: PASSED - all chunks are within the "
-                 "configured test-token limit.\n"
+                 "configured BGE-M3 token limit.\n\n";
+
+    std::vector<rag::EmbeddingResult> embeddings;
+    const bool embedding_generation_ok =
+        measureStage(timings, "Embedding generation (all chunks)", [&] {
+            embeddings.reserve(chunking.chunks.size());
+
+            for (const auto& chunk : chunking.chunks) {
+                rag::EmbeddingResult result =
+                    embedding_service->embedText(chunk.embedding_text);
+
+                if (!result.is_successful) {
+                    std::cout << "EMBEDDING RESULT: FAILED for chunk "
+                              << chunk.index << '\n'
+                              << "Reason: " << result.error << '\n';
+                    return false;
+                }
+
+                embeddings.push_back(std::move(result));
+            }
+            return true;
+        });
+
+    if (!embedding_generation_ok) {
+        printTimingReport(timings, program_start);
+        return 1;
+    }
+
+    const bool embedding_output_ok =
+        measureStage(timings, "Embedding result rendering", [&] {
+            for (std::size_t i = 0; i < embeddings.size(); ++i) {
+                const auto& vector = embeddings[i].dense_vector;
+                const double norm = calculateL2Norm(vector);
+
+                std::cout << "========================================\n"
+                          << "EMBEDDING FOR CHUNK "
+                          << chunking.chunks[i].index << '\n'
+                          << "========================================\n"
+                          << "Dimensions: " << vector.size() << '\n'
+                          << "L2 norm: " << std::fixed << std::setprecision(8)
+                          << norm << '\n'
+                          << "Normalization check: "
+                          << (std::abs(norm - 1.0) <= 1.0e-4
+                                  ? "PASSED"
+                                  : "FAILED")
+                          << "\n\n";
+                printEmbeddingVector(vector);
+                std::cout << '\n';
+            }
+        });
+
+    (void)embedding_output_ok;
+
+    for (const auto& embedding : embeddings) {
+        if (embedding.dense_vector.size() != 1024 ||
+            std::abs(calculateL2Norm(embedding.dense_vector) - 1.0) > 1.0e-4) {
+            std::cout << "EMBEDDING CHECK: FAILED - unexpected vector "
+                         "dimensions or non-normalized output.\n";
+            printTimingReport(timings, program_start);
+            return 1;
+        }
+    }
+
+    std::cout << "EMBEDDING CHECK: PASSED - generated "
+              << embeddings.size()
+              << " normalized 1024-dimensional vector(s).\n"
               << "\n========================================\n"
               << " PIPELINE COMPLETED SUCCESSFULLY\n"
               << "========================================\n";
