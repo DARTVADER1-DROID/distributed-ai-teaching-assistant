@@ -72,6 +72,7 @@ internal static class Program
         var chunks = new List<DocumentChunk>();
         var nativeTimer = Stopwatch.StartNew();
         var protocolCompleted = false;
+        Task<string>? nativeLogTask = null;
 
         using var process = new Process
         {
@@ -96,7 +97,7 @@ internal static class Program
             if (!process.Start())
                 throw new InvalidOperationException("Could not start the native C++ pipeline.");
 
-            var nativeLogTask = process.StandardError.ReadToEndAsync();
+            nativeLogTask = process.StandardError.ReadToEndAsync();
 
             string? line;
             while ((line = process.StandardOutput.ReadLine()) is not null)
@@ -147,6 +148,20 @@ internal static class Program
             catch
             {
                 // Preserve the original integration error.
+            }
+
+            if (nativeLogTask is not null)
+            {
+                try
+                {
+                    var nativeLog = nativeLogTask.GetAwaiter().GetResult();
+                    if (!string.IsNullOrWhiteSpace(nativeLog))
+                        Console.Error.Write(nativeLog);
+                }
+                catch
+                {
+                    // Preserve the original integration error.
+                }
             }
 
             Console.Error.WriteLine($"NATIVE PIPELINE FAILED: {exception.Message}");
