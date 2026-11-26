@@ -538,76 +538,45 @@ heading. That structure can then be used as metadata during RAG chunking and
 vector-database ingestion.
 
 
-## 13. Manual testing with the command-line runner
 
-The validator directory includes `main.cpp`, a small command-line program
-that exercises `ValidatorService::validatePdfFile()`. It uses the default
-`ValidatorConfig` and prints every issue returned by the service, including
-the reason and any available page, line, word-count, and extracted-text
-details.
+## 13. C++ library package
 
-Build both the library and runner from this directory:
-
-```bash
-cmake -S . -B build
-cmake --build build
-```
-
-Run the validator against a PDF:
-
-```bash
-./build/validator_cli path/to/document.pdf
-```
-
-On Windows, the executable is typically:
-
-```powershell
-.\build\Debug\validator_cli.exe path\to\document.pdf
-```
-
-The runner prints a PASS or FAIL result, configuration status, total issue
-count, and each individual issue. Its process exit codes are:
-
-| Exit code | Meaning |
-|---:|---|
-| 0 | PDF passed validation. |
-| 1 | Validation failed or one or more issues were reported. |
-| 2 | Invalid command-line usage (for example, missing PDF path). |
-
-To test a different document policy, edit the `ValidatorConfig config` in
-`main.cpp` before rebuilding. The runner is intended as a manual test
-harness; the `rag_validator` library remains independently usable by the
-RAG server.
-
-## 14. Windows cloud build
+The validator is maintained as a reusable C++ library. It does not contain a
+standalone command-line entry point. Applications should create their own
+entry point and call the public `ValidatorService` API.
 
 The repository includes a GitHub Actions workflow at
-`.github/workflows/validator-windows.yml`. It builds the command-line
-validator on a temporary Windows runner and packages the executable together
-with the MinGW and Poppler runtime DLLs.
+`.github/workflows/validator-windows.yml`. It builds the library on a
+temporary Windows runner and uploads a package containing the compiled static
+library and public headers.
 
 The workflow runs automatically when files under `rag-server/validator/`
 or the workflow itself are pushed, and on matching pull requests. It can also
 be started manually from the **Actions** tab using **Run workflow**.
 
-### Download the Windows build
+### Download the Windows library
 
 1. Open the repository's **Actions** tab.
 2. Select **Build PDF Validator (Windows)**.
 3. Open the latest successful run.
-4. Download the `validator-windows-x64` artifact.
+4. Download the `validator-windows-x64-library` artifact.
 
-The artifact contains the dedicated `output/` bundle:
+The package contains:
 
 ```text
 output/
-├── validator_cli.exe
-├── required runtime DLL files
-└── README-RUN.txt
+├── include/
+│   └── validator/
+│       ├── *.hpp
+│       └── config/
+│           └── *.hpp
+├── lib/
+│   └── librag_validator.a
+└── README-LIBRARY.txt
 ```
 
-Extract the downloaded ZIP. Keep the executable and DLL files together, then
-run the command shown in `README-RUN.txt` from PowerShell.
+The static library must be linked into a C++ application together with its
+Poppler C++ and Poppler dependencies. It is not a standalone executable.
 
 The cloud runner's output directory is temporary and is uploaded as a workflow
 artifact; compiled binaries are deliberately not committed to the source
