@@ -120,6 +120,25 @@ public sealed class EmbeddingService : IDisposable
     }
 
     /// <summary>
+    /// Counts tokens with the exact tokenizer loaded for BGE-M3, including
+    /// the model's special tokens. This can be supplied to the C++ chunker's
+    /// TokenCounter callback once the interop boundary is added.
+    /// </summary>
+    public int CountTokens(string text)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(text);
+
+        if (_tokenizer is null)
+            throw new InvalidOperationException("EmbeddingService is not initialized.");
+
+        lock (_sync)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            return _tokenizer.Encode(text).Length;
+        }
+    }
+
+    /// <summary>
     /// Embeds every chunk's embedding_text and preserves its source metadata.
     /// Failure is all-or-nothing: no partial chunk list is returned.
     /// </summary>
