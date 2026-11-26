@@ -354,14 +354,14 @@ int main(int argc, char* argv[]) {
         }
     });
 
-    std::cout << "CHUNKING CHECK: PASSED\\n"
-              << "Chunk boundaries were calculated with the BGE-M3 tokenizer.\\n"
-              << "Sending chunks to the C# embedding host...\\n";
+    std::cout << "CHUNKING CHECK: PASSED\n"
+              << "Chunk boundaries were calculated with the BGE-M3 tokenizer.\n"
+              << "Sending chunks to the C# embedding host...\n";
 
     std::cout.rdbuf(protocol_output_buffer);
     for (const auto& chunk : chunking.chunks)
         emitChunkProtocol(chunk);
-    std::cout << "DONE\\n" << std::flush;
+    std::cout << "DONE\n" << std::flush;
     std::cout.rdbuf(std::cerr.rdbuf());
 
     printTimingReport(timings, program_start);
