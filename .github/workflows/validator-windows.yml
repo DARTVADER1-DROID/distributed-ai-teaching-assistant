@@ -35,7 +35,6 @@ jobs:
             mingw-w64-x86_64-ninja
             mingw-w64-x86_64-poppler
             mingw-w64-x86_64-pkgconf
-            zip
 
       - name: Configure
         run: cmake -S rag-server/validator -B rag-server/validator/build -G Ninja -DCMAKE_BUILD_TYPE=Release
@@ -43,35 +42,44 @@ jobs:
       - name: Build
         run: cmake --build rag-server/validator/build --parallel
 
-      - name: Package executable and required DLLs
+      - name: Prepare standalone Windows bundle
         run: |
           set -euo pipefail
           exe="rag-server/validator/build/validator_cli.exe"
+          output="rag-server/validator/output"
           test -f "$exe"
-          mkdir -p dist
-          cp "$exe" dist/
+          rm -rf "$output"
+          mkdir -p "$output"
+          cp "$exe" "$output/"
 
-          # Collect the MinGW/Poppler DLL dependencies reported by ldd.
+          # Bundle every MinGW/Poppler runtime DLL required by the executable.
           ldd "$exe" | awk '{ for (i = 1; i <= NF; i++) if ($i ~ /^\/mingw64\/.*\.dll$/) print $i }' | sort -u > /tmp/validator-dlls.txt
           while IFS= read -r dll; do
             test -f "$dll"
-            cp -n "$dll" dist/
+            cp -n "$dll" "$output/"
           done < /tmp/validator-dlls.txt
 
-          cat > dist/README-RUN.txt <<'EOF'
+          cat > "$output/README-RUN.txt" <<'EOF'
           PDF Validator - Windows x64
 
-          Run from PowerShell:
+          Keep all files in this folder together.
+
+          Open PowerShell in this folder and run:
             .\validator_cli.exe "C:\path\to\document.pdf"
 
-          Keep the DLL files in this folder beside validator_cli.exe.
-          Exit codes: 0 = validation passed, 1 = validation failed, 2 = invalid command-line usage.
+          Exit codes:
+            0 = validation passed
+            1 = validation failed or issues were found
+            2 = invalid command-line usage
           EOF
 
-      - name: Upload Windows executable bundle
+          test -f "$output/validator_cli.exe"
+          test -s /tmp/validator-dlls.txt
+
+      - name: Upload validator output folder
         uses: actions/upload-artifact@v4
         with:
           name: validator-windows-x64
-          path: dist/
+          path: rag-server/validator/output/
           if-no-files-found: error
           retention-days: 14
