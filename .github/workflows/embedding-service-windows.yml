@@ -39,7 +39,7 @@ jobs:
         shell: pwsh
         run: |
           $library = "rag-server/embedding-service/build/Release/rag_embedding_service.lib"
-          $runtime = "rag-server/embedding-service/build/_deps/onnxruntime/onnxruntime-win-x64-1.30.0/lib/onnxruntime.dll"
+          $runtime = "rag-server/embedding-service/build/_deps/onnxruntime/microsoft.ml.onnxruntime.1.32.0/runtimes/win-x64/native/onnxruntime.dll"
 
           if (!(Test-Path $library)) {
             throw "Embedding service library was not produced: $library"
@@ -54,6 +54,6 @@ jobs:
           name: rag-embedding-service-windows-x64
           path: |
             rag-server/embedding-service/build/Release/rag_embedding_service.lib
-            rag-server/embedding-service/build/_deps/onnxruntime/onnxruntime-win-x64-1.30.0/lib/onnxruntime.dll
+            rag-server/embedding-service/build/_deps/onnxruntime/microsoft.ml.onnxruntime.1.32.0/runtimes/win-x64/native/onnxruntime.dll
           if-no-files-found: error
           retention-days: 14
