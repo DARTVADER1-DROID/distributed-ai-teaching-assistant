@@ -443,8 +443,7 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    const bool embedding_output_ok =
-        measureStage(timings, "Embedding result rendering", [&] {
+    measureStage(timings, "Embedding result rendering", [&] {
             for (std::size_t i = 0; i < embeddings.size(); ++i) {
                 const auto& vector = embeddings[i].dense_vector;
                 const double norm = calculateL2Norm(vector);
@@ -464,9 +463,7 @@ int main(int argc, char* argv[]) {
                 printEmbeddingVector(vector);
                 std::cout << '\n';
             }
-        });
-
-    (void)embedding_output_ok;
+    });
 
     for (const auto& embedding : embeddings) {
         if (embedding.dense_vector.size() != 1024 ||
