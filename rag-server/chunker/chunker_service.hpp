@@ -28,10 +28,11 @@ struct DocumentChunk {
     // Heading titles from the document root to the section containing this chunk.
     std::vector<std::string> heading_path;
 
-    // One-based source PDF page and visual line ranges.
+    // Source start and end positions. Each line number belongs to its paired page.
+    // All page and line numbers are one-based PDF positions.
     std::size_t start_page_number = 0;
-    std::size_t end_page_number = 0;
     std::size_t start_line_number = 0;
+    std::size_t end_page_number = 0;
     std::size_t end_line_number = 0;
 };
 
