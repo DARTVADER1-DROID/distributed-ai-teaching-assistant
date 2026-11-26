@@ -2,9 +2,7 @@ cmake_minimum_required(VERSION 3.16)
 
 project(rag_validator LANGUAGES CXX)
 
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(POPPLER_CPP REQUIRED IMPORTED_TARGET poppler-cpp>=0.89)
-pkg_check_modules(POPPLER REQUIRED IMPORTED_TARGET poppler)
+find_package(unofficial-poppler CONFIG REQUIRED)
 
 add_library(rag_validator
     validator_service.cpp
@@ -22,7 +20,11 @@ target_include_directories(rag_validator
 
 target_link_libraries(rag_validator
     PRIVATE
-        PkgConfig::POPPLER_CPP
-        PkgConfig::POPPLER
+        unofficial::poppler::poppler-cpp
 )
 
+if(MSVC)
+    target_compile_options(rag_validator PRIVATE /W4 /permissive-)
+else()
+    target_compile_options(rag_validator PRIVATE -Wall -Wextra -Wpedantic)
+endif()
