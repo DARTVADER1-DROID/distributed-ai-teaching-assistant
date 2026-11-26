@@ -11,26 +11,26 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # The end-user application is fully offline. These dependencies are acquired
 # only while building the application, then bundled with the application.
 # No dependency or model download is performed by EmbeddingService at runtime.
-set(RAG_ONNXRUNTIME_VERSION "1.30.0" CACHE STRING
+set(RAG_ONNXRUNTIME_VERSION "1.32.0" CACHE STRING
     "Pinned ONNX Runtime version used by the embedding service")
 
 set(RAG_ONNXRUNTIME_ROOT
     "${CMAKE_CURRENT_BINARY_DIR}/_deps/onnxruntime"
 )
 set(RAG_ONNXRUNTIME_PACKAGE
-    "${RAG_ONNXRUNTIME_ROOT}/onnxruntime-win-x64-${RAG_ONNXRUNTIME_VERSION}"
+    "${RAG_ONNXRUNTIME_ROOT}/microsoft.ml.onnxruntime.${RAG_ONNXRUNTIME_VERSION}"
 )
 set(RAG_ONNXRUNTIME_ARCHIVE
-    "${CMAKE_CURRENT_BINARY_DIR}/_deps/onnxruntime-win-x64.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/_deps/microsoft.ml.onnxruntime.nupkg"
 )
 
-if(NOT EXISTS "${RAG_ONNXRUNTIME_PACKAGE}/include/onnxruntime_cxx_api.h")
+if(NOT EXISTS "${RAG_ONNXRUNTIME_PACKAGE}/build/native/include/onnxruntime_cxx_api.h")
     file(MAKE_DIRECTORY "${RAG_ONNXRUNTIME_ROOT}")
 
     if(NOT EXISTS "${RAG_ONNXRUNTIME_ARCHIVE}")
         message(STATUS "Downloading pinned ONNX Runtime ${RAG_ONNXRUNTIME_VERSION}")
         file(DOWNLOAD
-            "https://github.com/microsoft/onnxruntime/releases/download/v${RAG_ONNXRUNTIME_VERSION}/onnxruntime-win-x64-${RAG_ONNXRUNTIME_VERSION}.zip"
+            "https://github.com/microsoft/onnxruntime/releases/download/v${RAG_ONNXRUNTIME_VERSION}/microsoft.ml.onnxruntime.${RAG_ONNXRUNTIME_VERSION}.zip"
             "${RAG_ONNXRUNTIME_ARCHIVE}"
             TLS_VERIFY ON
             SHOW_PROGRESS
@@ -51,7 +51,7 @@ if(NOT EXISTS "${RAG_ONNXRUNTIME_PACKAGE}/include/onnxruntime_cxx_api.h")
     )
 endif()
 
-if(NOT EXISTS "${RAG_ONNXRUNTIME_PACKAGE}/include/onnxruntime_cxx_api.h")
+if(NOT EXISTS "${RAG_ONNXRUNTIME_PACKAGE}/build/native/include/onnxruntime_cxx_api.h")
     message(FATAL_ERROR
         "The downloaded ONNX Runtime package is incomplete or has an unexpected layout."
     )
@@ -60,9 +60,9 @@ endif()
 add_library(rag_onnxruntime SHARED IMPORTED GLOBAL)
 set_target_properties(rag_onnxruntime PROPERTIES
     IMPORTED_IMPLIB
-        "${RAG_ONNXRUNTIME_PACKAGE}/lib/onnxruntime.lib"
+        "${RAG_ONNXRUNTIME_PACKAGE}/build/native/lib/x64/onnxruntime.lib"
     IMPORTED_LOCATION
-        "${RAG_ONNXRUNTIME_PACKAGE}/lib/onnxruntime.dll"
+        "${RAG_ONNXRUNTIME_PACKAGE}/runtimes/win-x64/native/onnxruntime.dll"
     INTERFACE_INCLUDE_DIRECTORIES
         "${RAG_ONNXRUNTIME_PACKAGE}/include"
 )
@@ -114,7 +114,7 @@ function(rag_copy_embedding_runtime target_name)
 
     add_custom_command(TARGET ${target_name} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${RAG_ONNXRUNTIME_PACKAGE}/lib/onnxruntime.dll"
+            "${RAG_ONNXRUNTIME_PACKAGE}/runtimes/win-x64/native/onnxruntime.dll"
             "$<TARGET_FILE_DIR:${target_name}>"
         VERBATIM
     )
