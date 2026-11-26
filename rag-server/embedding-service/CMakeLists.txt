@@ -143,14 +143,14 @@ elseif(MSVC)
         message(FATAL_ERROR "dumpbin failed: ${RAG_DUMPBIN_ERROR}")
     endif()
 
-    string(REPLACE "\\r\\n" "\\n" RAG_DUMPBIN_OUTPUT "${RAG_DUMPBIN_OUTPUT}")
-    string(REPLACE "\\n" ";" RAG_DUMPBIN_LINES "${RAG_DUMPBIN_OUTPUT}")
+    string(REPLACE "\r\n" "\n" RAG_DUMPBIN_OUTPUT "${RAG_DUMPBIN_OUTPUT}")
+    string(REPLACE "\n" ";" RAG_DUMPBIN_LINES "${RAG_DUMPBIN_OUTPUT}")
     set(RAG_ONNXRUNTIME_EXPORTS "")
     foreach(RAG_EXPORT_LINE IN LISTS RAG_DUMPBIN_LINES)
         if(RAG_EXPORT_LINE MATCHES
-           "^[ \\t]*[0-9]+[ \\t]+[0-9]+[ \\t]+[0-9A-Fa-f]+[ \\t]+([^ \\t]+)")
+           "^[ \t]*[0-9]+[ \t]+[0-9]+[ \t]+[0-9A-Fa-f]+[ \t]+([^ \t]+)")
             string(APPEND RAG_ONNXRUNTIME_EXPORTS
-                "    ${CMAKE_MATCH_1}\\n"
+                "    ${CMAKE_MATCH_1}\n"
             )
         endif()
     endforeach()
@@ -164,7 +164,7 @@ elseif(MSVC)
         "${RAG_ONNXRUNTIME_IMPORT_DIR}/onnxruntime.def"
     )
     file(WRITE "${RAG_ONNXRUNTIME_DEF}"
-        "LIBRARY onnxruntime\\nEXPORTS\\n${RAG_ONNXRUNTIME_EXPORTS}"
+        "LIBRARY onnxruntime\nEXPORTS\n${RAG_ONNXRUNTIME_EXPORTS}"
     )
     set(RAG_ONNXRUNTIME_IMPORT_LIBRARY
         "${RAG_ONNXRUNTIME_IMPORT_DIR}/onnxruntime.lib"
