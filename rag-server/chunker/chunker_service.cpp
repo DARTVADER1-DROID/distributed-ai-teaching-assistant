@@ -84,20 +84,27 @@ std::size_t findSplitPosition(
     const std::vector<std::string>& heading_path,
     const TokenCounter& counter
 ) {
-    // BPE token counts are not guaranteed to be monotonic as text is appended.
-    // Scan UTF-8 boundaries until the first over-limit prefix, retaining the
-    // largest known-safe prefix rather than binary-searching an invalid ordering.
+    const auto start_it =
+        std::lower_bound(boundaries.begin(), boundaries.end(), start);
+    std::size_t low =
+        static_cast<std::size_t>(start_it - boundaries.begin()) + 1;
+    std::size_t high = boundaries.size() - 1;
     std::size_t best = start;
-    for (const std::size_t boundary : boundaries) {
-        if (boundary <= start) {
-            continue;
-        }
 
-        const std::string candidate = text.substr(start, boundary - start);
-        if (countTokens(counter, heading_path, candidate) > max_tokens) {
-            break;
+    while (low <= high) {
+        const std::size_t middle = low + (high - low) / 2;
+        const std::size_t end = boundaries[middle];
+        const std::string candidate = text.substr(start, end - start);
+
+        if (countTokens(counter, heading_path, candidate) <= max_tokens) {
+            best = end;
+            low = middle + 1;
+        } else {
+            if (middle == 0) {
+                break;
+            }
+            high = middle - 1;
         }
-        best = boundary;
     }
 
     if (best == start) {
@@ -114,11 +121,11 @@ std::size_t findSplitPosition(
         }
 
         const char previous = text[boundary - 1];
-        const char current = boundary < text.size() ? text[boundary] : '\\0';
+        const char current = boundary < text.size() ? text[boundary] : '\0';
 
         if (boundary == text.size() ||
-            current == ' ' || current == '\\t' ||
-            current == '\\r' || current == '\\n') {
+            current == ' ' || current == '\t' ||
+            current == '\r' || current == '\n') {
             whitespace = boundary;
         }
         if (boundary < text.size() &&
