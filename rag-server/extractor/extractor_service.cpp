@@ -55,6 +55,16 @@ bool belongsToLine(
     return std::fabs(center - line_center) <= tolerance;
 }
 
+std::string trim(const std::string& value) {
+    const auto first = value.find_first_not_of(" \\t\\r\\n");
+    if (first == std::string::npos) {
+        return {};
+    }
+
+    const auto last = value.find_last_not_of(" \\t\\r\\n");
+    return value.substr(first, last - first + 1);
+}
+
 DocumentNode* nodeAtPath(
     DocumentNode& root,
     const std::vector<std::size_t>& path
@@ -287,6 +297,59 @@ ExtractionResult ExtractorService::extractPdf(
 
         const int heading_level =
             headingLevelForLine(line, body_font_size, config_);
+
+        // Topic closure markers are structural instructions, not document
+        // headings or paragraph content. Their font size identifies the
+        // heading level being closed.
+        if (trim(line.text) == "End of topic.") {
+            paragraph.active = false;
+
+            if (heading_level == 0) {
+                result.error =
+                    "The 'End of topic.' marker on page " +
+                    std::to_string(line.page_number) + ", line " +
+                    std::to_string(line.line_number) +
+                    " does not use a configured heading font size.";
+                return result;
+            }
+
+            if (heading_stack.empty()) {
+                result.error =
+                    "Unexpected 'End of topic.' marker at H" +
+                    std::to_string(heading_level) + " on page " +
+                    std::to_string(line.page_number) + ", line " +
+                    std::to_string(line.line_number) +
+                    ": there is no active heading to close.";
+                return result;
+            }
+
+            const HeadingFrame& active_heading = heading_stack.back();
+            if (active_heading.level != heading_level) {
+                result.error =
+                    "Invalid 'End of topic.' marker at H" +
+                    std::to_string(heading_level) + " on page " +
+                    std::to_string(line.page_number) + ", line " +
+                    std::to_string(line.line_number) +
+                    ": the active heading is H" +
+                    std::to_string(active_heading.level) +
+                    ". Close nested headings in reverse order.";
+                return result;
+            }
+
+            DocumentNode* heading_node =
+                nodeAtPath(result.document, active_heading.path);
+            if (!heading_node ||
+                heading_node->type != DocumentNodeType::Heading) {
+                result.error =
+                    "Internal hierarchy path became invalid while closing a heading.";
+                return result;
+            }
+
+            heading_node->end_page_number = line.page_number;
+            heading_node->end_line_number = line.line_number;
+            heading_stack.pop_back();
+            continue;
+        }
 
         if (heading_level != 0) {
             paragraph.active = false;
