@@ -176,7 +176,7 @@ ExtractionResult ExtractorService::extractPdf(
         return result;
     }
 
-    result.document.end_page_number =
+    result.document.page_count =
         static_cast<std::size_t>(pdf->pages());
 
     const double precision_scale =
@@ -196,6 +196,7 @@ ExtractionResult ExtractorService::extractPdf(
             page->text_list(poppler::page::text_list_include_font);
 
         std::size_t page_line_number = 0;
+        std::size_t current_line_fragment_count = 0;
         double current_line_center = 0.0;
         double current_line_height = 0.0;
 
@@ -227,13 +228,13 @@ ExtractionResult ExtractorService::extractPdf(
                 lines.push_back(std::move(line));
                 current_line_center = center;
                 current_line_height = height;
+                current_line_fragment_count = 1;
             } else {
-                const std::size_t existing_fragments =
-                    lines.back().font_sizes.size();
                 const double weight =
-                    static_cast<double>(std::max<std::size_t>(1, existing_fragments));
+                    static_cast<double>(current_line_fragment_count);
                 current_line_center =
                     (current_line_center * weight + center) / (weight + 1.0);
+                ++current_line_fragment_count;
                 current_line_height = std::max(current_line_height, height);
                 lines.back().top = std::min(lines.back().top, bounds.top());
                 lines.back().bottom = std::max(lines.back().bottom, bounds.bottom());
