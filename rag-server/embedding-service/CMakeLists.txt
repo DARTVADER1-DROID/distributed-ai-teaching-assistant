@@ -183,9 +183,19 @@ function(rag_copy_embedding_runtime target_name)
         message(FATAL_ERROR "Unknown target passed to rag_copy_embedding_runtime: ${target_name}")
     endif()
 
+    get_target_property(RAG_ONNXRUNTIME_RUNTIME_DLL
+        rag_onnxruntime IMPORTED_LOCATION
+    )
+    if(NOT RAG_ONNXRUNTIME_RUNTIME_DLL OR
+       NOT EXISTS "${RAG_ONNXRUNTIME_RUNTIME_DLL}")
+        message(FATAL_ERROR
+            "The ONNX Runtime DLL target location is unavailable."
+        )
+    endif()
+
     add_custom_command(TARGET ${target_name} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${RAG_ONNXRUNTIME_PACKAGE}/runtimes/win-x64/native/onnxruntime.dll"
+            "${RAG_ONNXRUNTIME_RUNTIME_DLL}"
             "$<TARGET_FILE_DIR:${target_name}>"
         VERBATIM
     )
