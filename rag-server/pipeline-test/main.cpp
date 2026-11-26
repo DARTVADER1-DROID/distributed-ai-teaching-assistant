@@ -17,6 +17,7 @@
 namespace {
 
 using SteadyClock = std::chrono::steady_clock;
+std::streambuf* protocol_output_buffer = nullptr;
 
 struct StageTiming {
     std::string name;
