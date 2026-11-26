@@ -118,16 +118,78 @@ if(MINGW)
             "${RAG_DLLTOOL_ERROR}"
         )
     endif()
-else()
-    set(RAG_ONNXRUNTIME_IMPORT_LIBRARY
-        "${RAG_ONNXRUNTIME_PACKAGE}/build/native/lib/x64/onnxruntime.lib"
-    )
-    if(NOT EXISTS "${RAG_ONNXRUNTIME_IMPORT_LIBRARY}")
+elseif(MSVC)
+    # Recent Microsoft.ML.OnnxRuntime NuGet packages provide the native DLL
+    # and headers but do not ship onnxruntime.lib. Generate the MSVC import
+    # library from the DLL's exported C API instead of relying on a missing
+    # package artifact.
+    get_filename_component(RAG_MSVC_BIN_DIR "${CMAKE_CXX_COMPILER}" DIRECTORY)
+    set(RAG_DUMPBIN_EXECUTABLE "${RAG_MSVC_BIN_DIR}/dumpbin.exe")
+    set(RAG_LIB_EXECUTABLE "${RAG_MSVC_BIN_DIR}/lib.exe")
+    if(NOT EXISTS "${RAG_DUMPBIN_EXECUTABLE}" OR
+       NOT EXISTS "${RAG_LIB_EXECUTABLE}")
         message(FATAL_ERROR
-            "The ONNX Runtime NuGet package does not contain its MSVC import "
-            "library: ${RAG_ONNXRUNTIME_IMPORT_LIBRARY}"
+            "Could not locate dumpbin.exe and lib.exe beside the MSVC compiler."
         )
     endif()
+
+    execute_process(
+        COMMAND "${RAG_DUMPBIN_EXECUTABLE}" /exports "${RAG_ONNXRUNTIME_DLL}"
+        RESULT_VARIABLE RAG_DUMPBIN_RESULT
+        OUTPUT_VARIABLE RAG_DUMPBIN_OUTPUT
+        ERROR_VARIABLE RAG_DUMPBIN_ERROR
+    )
+    if(NOT RAG_DUMPBIN_RESULT EQUAL 0)
+        message(FATAL_ERROR "dumpbin failed: ${RAG_DUMPBIN_ERROR}")
+    endif()
+
+    string(REPLACE "\\r\\n" "\\n" RAG_DUMPBIN_OUTPUT "${RAG_DUMPBIN_OUTPUT}")
+    string(REPLACE "\\n" ";" RAG_DUMPBIN_LINES "${RAG_DUMPBIN_OUTPUT}")
+    set(RAG_ONNXRUNTIME_EXPORTS "")
+    foreach(RAG_EXPORT_LINE IN LISTS RAG_DUMPBIN_LINES)
+        if(RAG_EXPORT_LINE MATCHES
+           "^[ \\t]*[0-9]+[ \\t]+[0-9]+[ \\t]+[0-9A-Fa-f]+[ \\t]+([^ \\t]+)")
+            string(APPEND RAG_ONNXRUNTIME_EXPORTS
+                "    ${CMAKE_MATCH_1}\\n"
+            )
+        endif()
+    endforeach()
+    if(RAG_ONNXRUNTIME_EXPORTS STREQUAL "")
+        message(FATAL_ERROR
+            "dumpbin did not return any named ONNX Runtime exports."
+        )
+    endif()
+
+    set(RAG_ONNXRUNTIME_DEF
+        "${RAG_ONNXRUNTIME_IMPORT_DIR}/onnxruntime.def"
+    )
+    file(WRITE "${RAG_ONNXRUNTIME_DEF}"
+        "LIBRARY onnxruntime\\nEXPORTS\\n${RAG_ONNXRUNTIME_EXPORTS}"
+    )
+    set(RAG_ONNXRUNTIME_IMPORT_LIBRARY
+        "${RAG_ONNXRUNTIME_IMPORT_DIR}/onnxruntime.lib"
+    )
+    execute_process(
+        COMMAND "${RAG_LIB_EXECUTABLE}"
+            "/DEF:${RAG_ONNXRUNTIME_DEF}"
+            "/MACHINE:X64"
+            "/OUT:${RAG_ONNXRUNTIME_IMPORT_LIBRARY}"
+        RESULT_VARIABLE RAG_LIB_RESULT
+        OUTPUT_VARIABLE RAG_LIB_OUTPUT
+        ERROR_VARIABLE RAG_LIB_ERROR
+    )
+    if(NOT RAG_LIB_RESULT EQUAL 0 OR
+       NOT EXISTS "${RAG_ONNXRUNTIME_IMPORT_LIBRARY}")
+        message(FATAL_ERROR
+            "Could not create the MSVC ONNX Runtime import library: "
+            "${RAG_LIB_ERROR}"
+        )
+    endif()
+else()
+    message(FATAL_ERROR
+        "ONNX Runtime import-library generation is supported only for "
+        "Windows MSVC and MinGW toolchains."
+    )
 endif()
 
 add_library(rag_onnxruntime SHARED IMPORTED GLOBAL)
