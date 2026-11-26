@@ -6,6 +6,7 @@ on:
       - "rag-server/validator/**"
       - "rag-server/extractor/**"
       - "rag-server/chunker/**"
+      - "rag-server/embedding-service/**"
       - "rag-server/config/**"
       - "rag-server/pipeline-test/**"
       - ".github/workflows/pipeline-test-windows.yml"
@@ -14,6 +15,7 @@ on:
       - "rag-server/validator/**"
       - "rag-server/extractor/**"
       - "rag-server/chunker/**"
+      - "rag-server/embedding-service/**"
       - "rag-server/config/**"
       - "rag-server/pipeline-test/**"
       - ".github/workflows/pipeline-test-windows.yml"
@@ -39,6 +41,7 @@ jobs:
           update: true
           install: >-
             mingw-w64-x86_64-toolchain
+            mingw-w64-x86_64-tools
             mingw-w64-x86_64-cmake
             mingw-w64-x86_64-ninja
             mingw-w64-x86_64-poppler
@@ -48,22 +51,24 @@ jobs:
       - name: Configure
         run: >-
           cmake -S rag-server/pipeline-test
-          -B rag-server/pipeline-test/build
+          -B C:/bld/rag-pipeline
           -G Ninja
           -DCMAKE_BUILD_TYPE=Release
 
       - name: Build executable
-        run: cmake --build rag-server/pipeline-test/build --parallel
+        run: cmake --build C:/bld/rag-pipeline --parallel
 
       - name: Package executable and runtime resources
         run: |
           set -euo pipefail
-          exe="rag-server/pipeline-test/build/rag_pipeline_test.exe"
+          exe="/c/bld/rag-pipeline/rag_pipeline_test.exe"
           output="rag-server/pipeline-test/output"
           test -s "$exe"
           rm -rf "$output"
           mkdir -p "$output"
           cp "$exe" "$output/"
+          test -s "/c/bld/rag-pipeline/onnxruntime.dll"
+          cp "/c/bld/rag-pipeline/onnxruntime.dll" "$output/"
 
           # Bundle MinGW and Poppler DLL dependencies beside the executable.
           ldd "$exe" | awk '/=>/ { print $3 } /^\// { print $1 }' |
@@ -91,15 +96,21 @@ jobs:
           1. Extract this entire folder.
           2. Open Command Prompt or PowerShell in this folder.
           3. Run:
-             .\rag_pipeline_test.exe "C:\full\path\to\your-document.pdf"
+             .\rag_pipeline_test.exe "C:\full\path\to\your-document.pdf" \
+               "C:\path\to\bge-m3\model.onnx" \
+               "C:\path\to\bge-m3\tokenizer.json"
 
-          The program validates the PDF, runs hierarchical extraction, then creates
-          structure-aware chunks and prints their text, heading paths, source
-          ranges, and test-token counts.
+          Keep model.onnx_data beside model.onnx if the ONNX export uses that
+          external-weight file. The ONNX Runtime DLL is included in this package.
 
-          The test executable uses a temporary whitespace-based tokenizer.
-          Its counts are for chunker testing only and are NOT BGE-M3 token counts.
-          The maximum chunk size is configured in config/chunker_config.hpp.
+          The program validates the PDF, extracts its hierarchy, creates
+          structure-aware chunks using the BGE-M3 tokenizer, and prints each
+          chunk's source range, embedding input, token count, dense vector,
+          vector dimensions, normalization check, and stage timings.
+
+          The BGE-M3 model and tokenizer are not included in this test artifact.
+          Supply the local model and tokenizer paths as the second and third
+          command-line arguments. No runtime network access is performed.
 
           Keep the DLL files and the share\poppler data directory in their
           original locations beside the EXE. Do not move the EXE by itself.
