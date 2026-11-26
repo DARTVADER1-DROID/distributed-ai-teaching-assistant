@@ -1,36 +1,84 @@
 # Extractor
 
-The extractor module is responsible for extracting structured content and metadata from source documents for downstream RAG processing.
+The extractor module reconstructs a navigable document hierarchy from validated PDF documents.
 
-## Shared document configuration
+## Public API
 
-Typography rules are defined centrally in
-`rag-server/config/document_format_config.hpp` as
-`rag::DocumentFormatConfig`.
+`ExtractorService` accepts the shared `DocumentFormatConfig` and exposes:
 
-The validator uses this configuration when checking heading and paragraph
-font sizes. The extractor will use the same configuration when interpreting
-the approved document's typography and reconstructing its heading hierarchy.
-The extractor must not introduce a separate set of heading-size rules.
+```cpp
+ExtractionResult extractPdf(
+    const std::vector<std::uint8_t>& pdf_data
+) const;
+```
 
-The shared configuration currently defines:
+The input is the raw byte content of a PDF. The caller is responsible for
+passing a document that has already passed `ValidatorService`. The extractor
+does not run validation again.
 
-- Expected font size for each configured heading level (H1–H6 by default).
-- Heading font-size matching tolerance.
-- Minimum size difference used to distinguish heading candidates from body text.
-- Paragraph/body-text font-size tolerance.
-- Font-size normalization precision.
+## Returned structure
 
-These values are expressed in PDF points where applicable. The defaults and
-runtime overrides are owned by the shared configuration, not by the extractor.
+The result contains:
 
-## Scope
+- `is_successful` and `error` for operation status.
+- A recursive `DocumentNode` tree.
+- Node types: `Document`, `Heading`, and `Paragraph`.
+- A `heading_level` value for heading nodes.
+- One-based page and visual-line positions, including the end position of
+  paragraph nodes.
+- A `children` collection for arbitrary-depth nesting.
 
-- Accept source documents through the extractor interface.
-- Extract document content and structural metadata.
-- Preserve source locations such as page numbers and text positions where available.
-- Return structured extraction results for subsequent processing.
+The hierarchy is dynamic. It does not contain fixed H1/H2/H3 fields or empty
+placeholder nodes for levels that do not occur in the document.
 
-PDF extraction and hierarchy construction are not implemented yet. Their
-interfaces and data contracts will be defined after the shared configuration
-has been reviewed.
+Conceptual example:
+
+```text
+Document
+└── Heading (level 1): Heading 1
+    └── Heading (level 2): Sub heading 2
+        └── Heading (level 3): Sub sub heading 1
+            └── Paragraph: Paragraph 2
+```
+
+A paragraph is attached to the deepest heading currently in scope. A new
+heading becomes a child of the nearest preceding heading with a lower level.
+Headings at the same or a higher level close the previous heading's scope.
+Consecutive body-text lines are joined into paragraph nodes when their page
+and vertical spacing indicate that they belong together.
+
+## Typography and heading detection
+
+The extractor consumes `rag::DocumentFormatConfig` from
+`rag-server/config/document_format_config.hpp`. Heading sizes, heading-size
+tolerance, body-size threshold, and font-size precision are not duplicated in
+the extractor.
+
+The most frequently occurring normalized font size is used as the body-font
+baseline, matching the validator's current approach. A line is treated as a
+heading when its font size matches a configured heading size within the shared
+tolerance and is sufficiently larger than the body baseline.
+
+The extractor trusts the caller's validation result; it does not independently
+verify that the document passed validation.
+
+## Limitations
+
+- Text extraction uses Poppler and PDF text/font metadata.
+- Scanned pages, outlined text, and documents without extractable font metadata
+  are not OCR-processed and return an extraction error.
+- Paragraph grouping is inferred from PDF line positions and vertical spacing;
+  PDF layout does not provide a universal semantic paragraph boundary.
+- The current result is a native C++ tree. It can be serialized to JSON by a
+  later API layer without adding a JSON dependency to this library.
+
+## Build
+
+Build as a C++17 static library:
+
+```sh
+cmake -S rag-server/extractor -B rag-server/extractor/build
+cmake --build rag-server/extractor/build
+```
+
+Poppler C++ and Poppler development libraries are required.
