@@ -43,19 +43,19 @@ jobs:
       - name: Set up pinned vcpkg
         shell: pwsh
         run: |
-          git clone https://github.com/microsoft/vcpkg.git C:/vcpkg
+          git clone https://github.com/microsoft/vcpkg.git C:/vcpkg-rag
           if ($LASTEXITCODE -ne 0) { throw "Could not clone vcpkg." }
 
-          git -C C:/vcpkg checkout e6d62cc9ce8f8d9687df14521118f2ec3c10ee6a
+          git -C C:/vcpkg-rag checkout e6d62cc9ce8f8d9687df14521118f2ec3c10ee6a
           if ($LASTEXITCODE -ne 0) { throw "Could not check out the pinned vcpkg baseline." }
 
-          & C:/vcpkg/bootstrap-vcpkg.bat -disableMetrics
+          & C:/vcpkg-rag/bootstrap-vcpkg.bat -disableMetrics
           if ($LASTEXITCODE -ne 0) { throw "vcpkg bootstrap failed." }
 
       - name: Configure MSVC x64 build and install dependencies
         shell: pwsh
         run: |
-          cmake -S rag-server/pipeline-test -B C:/bld/rag-pipeline -G "Visual Studio 17 2022" -A x64 -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake -DVCPKG_MANIFEST_DIR="$env:GITHUB_WORKSPACE/rag-server" -DVCPKG_INSTALLED_DIR=C:/vcpkg_installed -DVCPKG_TARGET_TRIPLET=x64-windows -DVCPKG_MANIFEST_INSTALL=ON
+          cmake -S rag-server/pipeline-test -B C:/bld/rag-pipeline -G "Visual Studio 17 2022" -A x64 -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg-rag/scripts/buildsystems/vcpkg.cmake -DVCPKG_MANIFEST_DIR="$env:GITHUB_WORKSPACE/rag-server" -DVCPKG_INSTALLED_DIR=C:/vcpkg-rag_installed -DVCPKG_TARGET_TRIPLET=x64-windows -DVCPKG_MANIFEST_INSTALL=ON
           if ($LASTEXITCODE -ne 0) { throw "MSVC CMake configuration or vcpkg dependency installation failed." }
 
       - name: Build executable
@@ -70,7 +70,7 @@ jobs:
           $ErrorActionPreference = "Stop"
           $exe = "C:/bld/rag-pipeline/Release/rag_pipeline_test.exe"
           $output = "rag-server/pipeline-test/output"
-          $vcpkgBin = "C:/vcpkg_installed/x64-windows/bin"
+          $vcpkgBin = "C:/vcpkg-rag_installed/x64-windows/bin"
           $onnxRuntime = "C:/bld/rag-pipeline/embedding-service/_deps/onnxruntime/microsoft.ml.onnxruntime.1.32.0/runtimes/win-x64/native/onnxruntime.dll"
 
           if (!(Test-Path $exe)) { throw "Pipeline executable was not produced: $exe" }
