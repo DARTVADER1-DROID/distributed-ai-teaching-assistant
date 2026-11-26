@@ -1,0 +1,77 @@
+name: Build PDF Validator (Windows)
+
+on:
+  push:
+    paths:
+      - "rag-server/validator/**"
+      - ".github/workflows/validator-windows.yml"
+  pull_request:
+    paths:
+      - "rag-server/validator/**"
+      - ".github/workflows/validator-windows.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up MSYS2 and install build dependencies
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            mingw-w64-x86_64-toolchain
+            mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-ninja
+            mingw-w64-x86_64-poppler
+            mingw-w64-x86_64-pkgconf
+            zip
+
+      - name: Configure
+        run: cmake -S rag-server/validator -B rag-server/validator/build -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build rag-server/validator/build --parallel
+
+      - name: Package executable and required DLLs
+        run: |
+          set -euo pipefail
+          exe="rag-server/validator/build/validator_cli.exe"
+          test -f "$exe"
+          mkdir -p dist
+          cp "$exe" dist/
+
+          # Collect the MinGW/Poppler DLL dependencies reported by ldd.
+          ldd "$exe" | awk '{ for (i = 1; i <= NF; i++) if ($i ~ /^\/mingw64\/.*\.dll$/) print $i }' | sort -u > /tmp/validator-dlls.txt
+          while IFS= read -r dll; do
+            test -f "$dll"
+            cp -n "$dll" dist/
+          done < /tmp/validator-dlls.txt
+
+          cat > dist/README-RUN.txt <<'EOF'
+          PDF Validator - Windows x64
+
+          Run from PowerShell:
+            .\validator_cli.exe "C:\path\to\document.pdf"
+
+          Keep the DLL files in this folder beside validator_cli.exe.
+          Exit codes: 0 = validation passed, 1 = validation failed, 2 = invalid command-line usage.
+          EOF
+
+      - name: Upload Windows executable bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: validator-windows-x64
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14
