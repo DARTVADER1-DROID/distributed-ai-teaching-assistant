@@ -26,6 +26,7 @@ struct DocumentNode {
     std::size_t page_number = 0;
     std::size_t line_number = 0;
     std::size_t end_page_number = 0;
+    std::size_t page_count = 0;
     std::size_t end_line_number = 0;
 
     std::vector<DocumentNode> children;
