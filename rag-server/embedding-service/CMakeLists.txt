@@ -11,7 +11,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # The end-user application is fully offline. These dependencies are acquired
 # only while building the application, then bundled with the application.
 # No dependency or model download is performed by EmbeddingService at runtime.
-set(RAG_ONNXRUNTIME_VERSION "1.23.2" CACHE STRING
+set(RAG_ONNXRUNTIME_VERSION "1.30.0" CACHE STRING
     "Pinned ONNX Runtime version used by the embedding service")
 
 set(RAG_ONNXRUNTIME_ROOT
