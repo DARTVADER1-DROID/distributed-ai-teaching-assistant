@@ -13,6 +13,7 @@ on:
     paths:
       - "rag-server/validator/**"
       - "rag-server/extractor/**"
+      - "rag-server/chunker/**"
       - "rag-server/config/**"
       - "rag-server/pipeline-test/**"
       - ".github/workflows/pipeline-test-windows.yml"
@@ -85,21 +86,25 @@ jobs:
           cp -a "$poppler_data" "$output/share/"
 
           cat > "$output/README.txt" <<'EOF'
-          RAG Validator + Extractor Pipeline Test (Windows x64)
+          RAG Validator + Extractor + Chunker Pipeline Test (Windows x64)
 
           1. Extract this entire folder.
           2. Open Command Prompt or PowerShell in this folder.
           3. Run:
              .\rag_pipeline_test.exe "C:\full\path\to\your-document.pdf"
 
-          The program validates the PDF first. If validation passes, it runs
-          hierarchical extraction and prints the document tree. The chunker
-          library is included in this build and is ready for tokenizer wiring.
+          The program validates the PDF, runs hierarchical extraction, then creates
+          structure-aware chunks and prints their text, heading paths, source
+          ranges, and test-token counts.
+
+          The test executable uses a temporary whitespace-based tokenizer.
+          Its counts are for chunker testing only and are NOT BGE-M3 token counts.
+          The maximum chunk size is configured in config/chunker_config.hpp.
 
           Keep the DLL files and the share\poppler data directory in their
           original locations beside the EXE. Do not move the EXE by itself.
 
-          Exit code 0 = both stages passed.
+          Exit code 0 = validation, extraction, and chunking passed.
           Exit code 1 = validation or extraction failed.
           Exit code 2 = invalid command line or input file read failure.
           EOF
