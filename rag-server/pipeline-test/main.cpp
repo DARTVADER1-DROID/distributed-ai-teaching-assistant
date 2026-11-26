@@ -30,6 +30,10 @@ std::size_t countTestTokens(const std::string& text) {
     return count;
 }
 
+void printSourcePosition(std::size_t page_number, std::size_t line_number) {
+    std::cout << "Page " << page_number << ", Line " << line_number;
+}
+
 void printTree(const rag::DocumentNode& node, std::size_t depth = 0) {
     const std::string indent(depth * 2, ' ');
 
@@ -40,10 +44,16 @@ void printTree(const rag::DocumentNode& node, std::size_t depth = 0) {
                   << node.text << " [page " << node.page_number
                   << ", line " << node.line_number << "]\n";
     } else {
-        std::cout << indent << "Paragraph: " << node.text
-                  << " [page " << node.page_number << ", lines "
-                  << node.line_number << "-" << node.end_line_number
-                  << "]\n";
+        const std::size_t end_page =
+            node.end_page_number != 0 ? node.end_page_number : node.page_number;
+        const std::size_t end_line =
+            node.end_line_number != 0 ? node.end_line_number : node.line_number;
+
+        std::cout << indent << "Paragraph: " << node.text << " [";
+        printSourcePosition(node.page_number, node.line_number);
+        std::cout << " - ";
+        printSourcePosition(end_page, end_line);
+        std::cout << "]\\n";
     }
 
     for (const auto& child : node.children) {
@@ -214,10 +224,12 @@ int main(int argc, char* argv[]) {
                   << (token_count <= chunker_config.max_chunk_tokens
                           ? " [OK]\n"
                           : " [LIMIT EXCEEDED]\n")
-                  << "Source pages: " << chunk.start_page_number
-                  << "-" << chunk.end_page_number << '\n'
-                  << "Source lines: " << chunk.start_line_number
-                  << "-" << chunk.end_line_number << "\n\n"
+                  ;
+        std::cout << "\\nSource start: ";
+        printSourcePosition(chunk.start_page_number, chunk.start_line_number);
+        std::cout << "\\nSource end:   ";
+        printSourcePosition(chunk.end_page_number, chunk.end_line_number);
+        std::cout << "\\n\\n"
                   << "Original chunk text:\n"
                   << chunk.text << "\n\n"
                   << "Embedding input (heading context + text):\n"
