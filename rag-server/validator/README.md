@@ -578,3 +578,38 @@ To test a different document policy, edit the `ValidatorConfig config` in
 `main.cpp` before rebuilding. The runner is intended as a manual test
 harness; the `rag_validator` library remains independently usable by the
 RAG server.
+
+## 14. Windows cloud build
+
+The repository includes a GitHub Actions workflow at
+`.github/workflows/validator-windows.yml`. It builds the command-line
+validator on a temporary Windows runner and packages the executable together
+with the MinGW and Poppler runtime DLLs.
+
+The workflow runs automatically when files under `rag-server/validator/`
+or the workflow itself are pushed, and on matching pull requests. It can also
+be started manually from the **Actions** tab using **Run workflow**.
+
+### Download the Windows build
+
+1. Open the repository's **Actions** tab.
+2. Select **Build PDF Validator (Windows)**.
+3. Open the latest successful run.
+4. Download the `validator-windows-x64` artifact.
+
+The artifact contains the dedicated `output/` bundle:
+
+```text
+output/
+├── validator_cli.exe
+├── required runtime DLL files
+└── README-RUN.txt
+```
+
+Extract the downloaded ZIP. Keep the executable and DLL files together, then
+run the command shown in `README-RUN.txt` from PowerShell.
+
+The cloud runner's output directory is temporary and is uploaded as a workflow
+artifact; compiled binaries are deliberately not committed to the source
+repository. Artifacts are retained for 14 days, so download a build you want
+to keep.
