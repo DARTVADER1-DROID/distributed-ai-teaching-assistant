@@ -58,12 +58,82 @@ if(NOT EXISTS "${RAG_ONNXRUNTIME_PACKAGE}/build/native/include/onnxruntime_cxx_a
     )
 endif()
 
+set(RAG_ONNXRUNTIME_DLL
+    "${RAG_ONNXRUNTIME_PACKAGE}/runtimes/win-x64/native/onnxruntime.dll"
+)
+if(NOT EXISTS "${RAG_ONNXRUNTIME_DLL}")
+    message(FATAL_ERROR "ONNX Runtime DLL is missing: ${RAG_ONNXRUNTIME_DLL}")
+endif()
+
+# The NuGet package supplies the Windows runtime DLL, but the MinGW pipeline
+# needs a GNU import archive rather than an MSVC .lib. Generate that archive
+# from the DLL exports at configure time. MSVC builds use the package .lib
+# when it is present, or generate one with lib.exe from the same .def file.
+set(RAG_ONNXRUNTIME_IMPORT_DIR "${CMAKE_CURRENT_BINARY_DIR}/onnxruntime-import")
+file(MAKE_DIRECTORY "${RAG_ONNXRUNTIME_IMPORT_DIR}")
+
+if(MINGW)
+    find_program(RAG_GENDEF_EXECUTABLE NAMES gendef REQUIRED)
+    find_program(RAG_DLLTOOL_EXECUTABLE NAMES dlltool REQUIRED)
+
+    execute_process(
+        COMMAND "${RAG_GENDEF_EXECUTABLE}" "${RAG_ONNXRUNTIME_DLL}"
+        WORKING_DIRECTORY "${RAG_ONNXRUNTIME_IMPORT_DIR}"
+        RESULT_VARIABLE RAG_GENDEF_RESULT
+        OUTPUT_VARIABLE RAG_GENDEF_OUTPUT
+        ERROR_VARIABLE RAG_GENDEF_ERROR
+    )
+    if(NOT RAG_GENDEF_RESULT EQUAL 0)
+        message(FATAL_ERROR "gendef failed: ${RAG_GENDEF_ERROR}")
+    endif()
+
+    file(GLOB RAG_ONNXRUNTIME_DEF_FILES
+        "${RAG_ONNXRUNTIME_IMPORT_DIR}/*.def"
+    )
+    list(LENGTH RAG_ONNXRUNTIME_DEF_FILES RAG_ONNXRUNTIME_DEF_COUNT)
+    if(NOT RAG_ONNXRUNTIME_DEF_COUNT EQUAL 1)
+        message(FATAL_ERROR
+            "gendef did not produce exactly one ONNX Runtime .def file. "
+            "Output: ${RAG_GENDEF_OUTPUT}"
+        )
+    endif()
+    list(GET RAG_ONNXRUNTIME_DEF_FILES 0 RAG_ONNXRUNTIME_DEF)
+
+    set(RAG_ONNXRUNTIME_IMPORT_LIBRARY
+        "${RAG_ONNXRUNTIME_IMPORT_DIR}/libonnxruntime.dll.a"
+    )
+    execute_process(
+        COMMAND "${RAG_DLLTOOL_EXECUTABLE}"
+            --input-def "${RAG_ONNXRUNTIME_DEF}"
+            --dllname onnxruntime.dll
+            --output-lib "${RAG_ONNXRUNTIME_IMPORT_LIBRARY}"
+        RESULT_VARIABLE RAG_DLLTOOL_RESULT
+        OUTPUT_VARIABLE RAG_DLLTOOL_OUTPUT
+        ERROR_VARIABLE RAG_DLLTOOL_ERROR
+    )
+    if(NOT RAG_DLLTOOL_RESULT EQUAL 0 OR
+       NOT EXISTS "${RAG_ONNXRUNTIME_IMPORT_LIBRARY}")
+        message(FATAL_ERROR
+            "Could not create the MinGW ONNX Runtime import library: "
+            "${RAG_DLLTOOL_ERROR}"
+        )
+    endif()
+else()
+    set(RAG_ONNXRUNTIME_IMPORT_LIBRARY
+        "${RAG_ONNXRUNTIME_PACKAGE}/build/native/lib/x64/onnxruntime.lib"
+    )
+    if(NOT EXISTS "${RAG_ONNXRUNTIME_IMPORT_LIBRARY}")
+        message(FATAL_ERROR
+            "The ONNX Runtime NuGet package does not contain its MSVC import "
+            "library: ${RAG_ONNXRUNTIME_IMPORT_LIBRARY}"
+        )
+    endif()
+endif()
+
 add_library(rag_onnxruntime SHARED IMPORTED GLOBAL)
 set_target_properties(rag_onnxruntime PROPERTIES
-    IMPORTED_IMPLIB
-        "${RAG_ONNXRUNTIME_PACKAGE}/build/native/lib/x64/onnxruntime.lib"
-    IMPORTED_LOCATION
-        "${RAG_ONNXRUNTIME_PACKAGE}/runtimes/win-x64/native/onnxruntime.dll"
+    IMPORTED_IMPLIB "${RAG_ONNXRUNTIME_IMPORT_LIBRARY}"
+    IMPORTED_LOCATION "${RAG_ONNXRUNTIME_DLL}"
     INTERFACE_INCLUDE_DIRECTORIES
         "${RAG_ONNXRUNTIME_PACKAGE}/build/native/include"
 )
