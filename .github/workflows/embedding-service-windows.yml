@@ -1,0 +1,30 @@
+name: Embedding Service (Windows)
+
+on:
+  push:
+    paths:
+      - "rag-server/embedding-service/**"
+      - ".github/workflows/embedding-service-windows.yml"
+  pull_request:
+    paths:
+      - "rag-server/embedding-service/**"
+      - ".github/workflows/embedding-service-windows.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Restore
+        run: dotnet restore rag-server/embedding-service/EmbeddingService.csproj
+
+      - name: Build
+        run: dotnet build rag-server/embedding-service/EmbeddingService.csproj --configuration Release --no-restore
