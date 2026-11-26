@@ -108,8 +108,12 @@ because heading traversal depends on the same heading-size configuration.
 
 ## 3. Configuration
 
-All rules are configured through `rag::ValidatorConfig` in
-`config/validator_config.hpp`.
+Validator settings are configured through `rag::ValidatorConfig` in
+`validator/config/validator_config.hpp`. Typography rules are defined once in
+`rag::DocumentFormatConfig` at `config/document_format_config.hpp` and are
+inherited by `ValidatorConfig`. The extractor will consume this same shared
+typography configuration, so heading and paragraph font-size rules cannot
+drift between validation and extraction.
 
 ### Default values
 
@@ -152,7 +156,9 @@ config.font_size_precision_decimal_places = 2;
 rag::ValidatorService validator(config);
 ```
 
-The heading-size map may contain only the levels required by a particular
+The shared `DocumentFormatConfig` owns the heading-size map and typography
+tolerances. Both the validator and extractor use these same values. The
+heading-size map may contain only the levels required by a particular
 document policy. Configured heading levels must be in the H1–H6 range, and
 configured sizes must be finite and greater than zero.
 
