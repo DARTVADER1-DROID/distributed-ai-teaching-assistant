@@ -4,6 +4,7 @@ project(rag_pipeline_test LANGUAGES CXX)
 
 add_subdirectory(../validator validator)
 add_subdirectory(../extractor extractor)
+add_subdirectory(../chunker chunker)
 
 add_executable(rag_pipeline_test
     main.cpp
@@ -15,4 +16,5 @@ target_link_libraries(rag_pipeline_test
     PRIVATE
         rag_validator
         rag_extractor
+        rag_chunker
 )
