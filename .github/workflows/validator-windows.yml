@@ -42,44 +42,36 @@ jobs:
       - name: Build
         run: cmake --build rag-server/validator/build --parallel
 
-      - name: Prepare standalone Windows bundle
+      - name: Prepare C++ library package
         run: |
           set -euo pipefail
-          exe="rag-server/validator/build/validator_cli.exe"
+          library="rag-server/validator/build/librag_validator.a"
           output="rag-server/validator/output"
-          test -f "$exe"
+          test -f "$library"
           rm -rf "$output"
-          mkdir -p "$output"
-          cp "$exe" "$output/"
+          mkdir -p "$output/include/validator/config" "$output/lib"
+          cp "$library" "$output/lib/"
+          cp rag-server/validator/*.hpp "$output/include/validator/"
+          cp rag-server/validator/config/*.hpp "$output/include/validator/config/"
 
-          # Bundle every MinGW/Poppler runtime DLL required by the executable.
-          ldd "$exe" | awk '{ for (i = 1; i <= NF; i++) if ($i ~ /^\/mingw64\/.*\.dll$/) print $i }' | sort -u > /tmp/validator-dlls.txt
-          while IFS= read -r dll; do
-            test -f "$dll"
-            cp -n "$dll" "$output/"
-          done < /tmp/validator-dlls.txt
+          cat > "$output/README-LIBRARY.txt" <<'EOF'
+          RAG PDF Validator - Windows x64 C++ library
 
-          cat > "$output/README-RUN.txt" <<'EOF'
-          PDF Validator - Windows x64
+          This package contains the compiled static library and public headers.
+          It is not a standalone executable. Link it into your C++ application
+          and also link the Poppler C++ and Poppler libraries.
 
-          Keep all files in this folder together.
-
-          Open PowerShell in this folder and run:
-            .\validator_cli.exe "C:\path\to\document.pdf"
-
-          Exit codes:
-            0 = validation passed
-            1 = validation failed or issues were found
-            2 = invalid command-line usage
+          Build configuration and dependency discovery are defined in the
+          validator source CMakeLists.txt.
           EOF
 
-          test -f "$output/validator_cli.exe"
-          test -s /tmp/validator-dlls.txt
+          test -s "$output/lib/librag_validator.a"
+          test -f "$output/include/validator/validator_service.hpp"
 
-      - name: Upload validator output folder
+      - name: Upload validator library package
         uses: actions/upload-artifact@v4
         with:
-          name: validator-windows-x64
+          name: validator-windows-x64-library
           path: rag-server/validator/output/
           if-no-files-found: error
           retention-days: 14
