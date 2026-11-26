@@ -6,7 +6,6 @@ on:
       - "rag-server/validator/**"
       - "rag-server/extractor/**"
       - "rag-server/chunker/**"
-      - "rag-server/embedding-service/**"
       - "rag-server/config/**"
       - "rag-server/pipeline-test/**"
       - "rag-server/vcpkg.json"
@@ -16,7 +15,6 @@ on:
       - "rag-server/validator/**"
       - "rag-server/extractor/**"
       - "rag-server/chunker/**"
-      - "rag-server/embedding-service/**"
       - "rag-server/config/**"
       - "rag-server/pipeline-test/**"
       - "rag-server/vcpkg.json"
@@ -36,9 +34,6 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
-
-      - name: Install Rust build toolchain
-        uses: dtolnay/rust-toolchain@stable
 
       - name: Set up pinned vcpkg
         shell: pwsh
@@ -71,37 +66,30 @@ jobs:
           $exe = "C:/bld/rag-pipeline/Release/rag_pipeline_test.exe"
           $output = "rag-server/pipeline-test/output"
           $vcpkgBin = "C:/vcpkg-rag_installed/x64-windows/bin"
-          $onnxRuntime = "C:/bld/rag-pipeline/embedding-service/_deps/onnxruntime/microsoft.ml.onnxruntime.1.32.0/runtimes/win-x64/native/onnxruntime.dll"
 
           if (!(Test-Path $exe)) { throw "Pipeline executable was not produced: $exe" }
-          if (!(Test-Path $onnxRuntime)) { throw "ONNX Runtime DLL was not found: $onnxRuntime" }
           if (!(Test-Path $vcpkgBin)) { throw "vcpkg runtime directory was not found: $vcpkgBin" }
 
           if (Test-Path $output) { Remove-Item $output -Recurse -Force }
           New-Item -ItemType Directory -Path $output -Force | Out-Null
 
           Copy-Item $exe $output
-          Copy-Item $onnxRuntime $output
           Get-ChildItem $vcpkgBin -Filter "*.dll" -File | Copy-Item -Destination $output -Force
 
           @"
-          RAG Validator + Extractor + Chunker + Embedding Pipeline Test (Windows x64)
+          RAG Validator + Extractor + Chunker Pipeline Test (Windows x64)
 
           Run from this extracted folder:
-            .\rag_pipeline_test.exe "C:\full\path\to\document.pdf" "C:\path\to\model.onnx" "C:\path\to\tokenizer.json"
+            .\rag_pipeline_test.exe "C:\full\path\to\document.pdf"
 
-          Keep model.onnx external-weight files beside model.onnx using their
-          exact exported filenames. The ONNX Runtime DLL and vcpkg runtime DLLs
-          required by this build are included beside the executable.
+          Runtime DLLs required by this build are included beside the executable.
+          Chunk sizing currently uses a temporary UTF-8 code-point proxy.
+          The exact model tokenizer will be supplied by the C# application layer.
 
-          The BGE-M3 model and tokenizer are not included. Supply local files;
-          runtime inference and tokenization do not require network access.
-
-          This is a CI test package, not yet the final single-file installer.
+          This is a CI test package, not yet the final cross-platform installer.
           "@ | Set-Content "$output/README.txt" -Encoding UTF8
 
           if (!(Test-Path "$output/rag_pipeline_test.exe")) { throw "Executable packaging failed." }
-          if (!(Test-Path "$output/onnxruntime.dll")) { throw "ONNX Runtime packaging failed." }
 
       - name: Upload runnable Windows package
         uses: actions/upload-artifact@v4
