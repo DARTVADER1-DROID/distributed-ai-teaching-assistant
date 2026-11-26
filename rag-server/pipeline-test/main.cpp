@@ -53,7 +53,7 @@ void printTree(const rag::DocumentNode& node, std::size_t depth = 0) {
         printSourcePosition(node.page_number, node.line_number);
         std::cout << " - ";
         printSourcePosition(end_page, end_line);
-        std::cout << "]\\n";
+        std::cout << "]\n";
     }
 
     for (const auto& child : node.children) {
@@ -225,11 +225,11 @@ int main(int argc, char* argv[]) {
                           ? " [OK]\n"
                           : " [LIMIT EXCEEDED]\n")
                   ;
-        std::cout << "\\nSource start: ";
+        std::cout << "\nSource start: ";
         printSourcePosition(chunk.start_page_number, chunk.start_line_number);
-        std::cout << "\\nSource end:   ";
+        std::cout << "\nSource end:   ";
         printSourcePosition(chunk.end_page_number, chunk.end_line_number);
-        std::cout << "\\n\\n"
+        std::cout << "\n\n"
                   << "Original chunk text:\n"
                   << chunk.text << "\n\n"
                   << "Embedding input (heading context + text):\n"
