@@ -9,6 +9,7 @@ on:
       - "rag-server/embedding-service/**"
       - "rag-server/config/**"
       - "rag-server/pipeline-test/**"
+      - "rag-server/vcpkg.json"
       - ".github/workflows/pipeline-test-windows.yml"
   pull_request:
     paths:
@@ -18,115 +19,89 @@ on:
       - "rag-server/embedding-service/**"
       - "rag-server/config/**"
       - "rag-server/pipeline-test/**"
+      - "rag-server/vcpkg.json"
       - ".github/workflows/pipeline-test-windows.yml"
   workflow_dispatch:
 
 permissions:
   contents: read
 
+env:
+  VCPKG_DISABLE_METRICS: 1
+
 jobs:
   build-windows:
     runs-on: windows-latest
-    defaults:
-      run:
-        shell: msys2 {0}
+
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Set up MSYS2 and install build dependencies
-        uses: msys2/setup-msys2@v2
-        with:
-          msystem: MINGW64
-          update: true
-          install: >-
-            mingw-w64-x86_64-gcc
-            mingw-w64-x86_64-binutils
-            mingw-w64-x86_64-tools-git
-            mingw-w64-x86_64-cmake
-            mingw-w64-x86_64-ninja
-            mingw-w64-x86_64-poppler
-            mingw-w64-x86_64-poppler-data
-            mingw-w64-x86_64-pkgconf
+      - name: Install Rust build toolchain
+        uses: dtolnay/rust-toolchain@stable
 
-      - name: Configure
-        run: >-
-          cmake -S rag-server/pipeline-test
-          -B C:/bld/rag-pipeline
-          -G Ninja
-          -DCMAKE_BUILD_TYPE=Release
+      - name: Set up pinned vcpkg
+        shell: pwsh
+        run: |
+          git clone https://github.com/microsoft/vcpkg.git C:/vcpkg
+          if ($LASTEXITCODE -ne 0) { throw "Could not clone vcpkg." }
+
+          git -C C:/vcpkg checkout e6d62cc9ce8f8d9687df14521118f2ec3c10ee6a
+          if ($LASTEXITCODE -ne 0) { throw "Could not check out the pinned vcpkg baseline." }
+
+          & C:/vcpkg/bootstrap-vcpkg.bat -disableMetrics
+          if ($LASTEXITCODE -ne 0) { throw "vcpkg bootstrap failed." }
+
+      - name: Configure MSVC x64 build and install dependencies
+        shell: pwsh
+        run: |
+          cmake -S rag-server/pipeline-test -B C:/bld/rag-pipeline -G "Visual Studio 17 2022" -A x64 -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake -DVCPKG_MANIFEST_DIR="$env:GITHUB_WORKSPACE/rag-server" -DVCPKG_INSTALLED_DIR=C:/vcpkg_installed -DVCPKG_TARGET_TRIPLET=x64-windows -DVCPKG_MANIFEST_INSTALL=ON
+          if ($LASTEXITCODE -ne 0) { throw "MSVC CMake configuration or vcpkg dependency installation failed." }
 
       - name: Build executable
-        run: cmake --build C:/bld/rag-pipeline --parallel
-
-      - name: Package executable and runtime resources
+        shell: pwsh
         run: |
-          set -euo pipefail
-          exe="/c/bld/rag-pipeline/rag_pipeline_test.exe"
-          output="rag-server/pipeline-test/output"
-          test -s "$exe"
-          rm -rf "$output"
-          mkdir -p "$output"
-          cp "$exe" "$output/"
-          test -s "/c/bld/rag-pipeline/onnxruntime.dll"
-          cp "/c/bld/rag-pipeline/onnxruntime.dll" "$output/"
+          cmake --build C:/bld/rag-pipeline --config Release --parallel
+          if ($LASTEXITCODE -ne 0) { throw "RAG pipeline compilation failed." }
 
-          # Bundle MinGW and Poppler DLL dependencies beside the executable.
-          ldd "$exe" | awk '/=>/ { print $3 } /^\// { print $1 }' |
-            grep '^/mingw64/bin/.*\.dll$' |
-            sort -u |
-            while IFS= read -r dll; do
-              test -f "$dll"
-              cp -u "$dll" "$output/"
-            done
+      - name: Package runnable Windows test
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $exe = "C:/bld/rag-pipeline/Release/rag_pipeline_test.exe"
+          $output = "rag-server/pipeline-test/output"
+          $vcpkgBin = "C:/vcpkg_installed/x64-windows/bin"
+          $onnxRuntime = "C:/bld/rag-pipeline/embedding-service/_deps/onnxruntime/microsoft.ml.onnxruntime.1.32.0/runtimes/win-x64/native/onnxruntime.dll"
 
-          # Poppler is built as relocatable by MSYS2. Its runtime data lookup
-          # resolves this directory relative to the Poppler DLL location.
-          poppler_data="/mingw64/share/poppler"
-          test -d "$poppler_data"
-          test -d "$poppler_data/cMap"
-          test -d "$poppler_data/cidToUnicode"
-          test -d "$poppler_data/nameToUnicode"
-          test -d "$poppler_data/unicodeMap"
-          mkdir -p "$output/share"
-          cp -a "$poppler_data" "$output/share/"
+          if (!(Test-Path $exe)) { throw "Pipeline executable was not produced: $exe" }
+          if (!(Test-Path $onnxRuntime)) { throw "ONNX Runtime DLL was not found: $onnxRuntime" }
+          if (!(Test-Path $vcpkgBin)) { throw "vcpkg runtime directory was not found: $vcpkgBin" }
 
-          cat > "$output/README.txt" <<'EOF'
-          RAG Validator + Extractor + Chunker Pipeline Test (Windows x64)
+          if (Test-Path $output) { Remove-Item $output -Recurse -Force }
+          New-Item -ItemType Directory -Path $output -Force | Out-Null
 
-          1. Extract this entire folder.
-          2. Open Command Prompt or PowerShell in this folder.
-          3. Run:
-             .\rag_pipeline_test.exe "C:\full\path\to\your-document.pdf" \
-               "C:\path\to\bge-m3\model.onnx" \
-               "C:\path\to\bge-m3\tokenizer.json"
+          Copy-Item $exe $output
+          Copy-Item $onnxRuntime $output
+          Get-ChildItem $vcpkgBin -Filter "*.dll" -File | Copy-Item -Destination $output -Force
 
-          Keep model.onnx_data beside model.onnx if the ONNX export uses that
-          external-weight file. The ONNX Runtime DLL is included in this package.
+          @"
+          RAG Validator + Extractor + Chunker + Embedding Pipeline Test (Windows x64)
 
-          The program validates the PDF, extracts its hierarchy, creates
-          structure-aware chunks using the BGE-M3 tokenizer, and prints each
-          chunk's source range, embedding input, token count, dense vector,
-          vector dimensions, normalization check, and stage timings.
+          Run from this extracted folder:
+            .\rag_pipeline_test.exe "C:\full\path\to\document.pdf" "C:\path\to\model.onnx" "C:\path\to\tokenizer.json"
 
-          The BGE-M3 model and tokenizer are not included in this test artifact.
-          Supply the local model and tokenizer paths as the second and third
-          command-line arguments. No runtime network access is performed.
+          Keep model.onnx external-weight files beside model.onnx using their
+          exact exported filenames. The ONNX Runtime DLL and vcpkg runtime DLLs
+          required by this build are included beside the executable.
 
-          Keep the DLL files and the share\poppler data directory in their
-          original locations beside the EXE. Do not move the EXE by itself.
+          The BGE-M3 model and tokenizer are not included. Supply local files;
+          runtime inference and tokenization do not require network access.
 
-          Exit code 0 = validation, extraction, and chunking passed.
-          Exit code 1 = validation or extraction failed.
-          Exit code 2 = invalid command line or input file read failure.
-          EOF
+          This is a CI test package, not yet the final single-file installer.
+          "@ | Set-Content "$output/README.txt" -Encoding UTF8
 
-          test -s "$output/rag_pipeline_test.exe"
-          test -s "$output/README.txt"
-          test -d "$output/share/poppler/cMap"
-          test -d "$output/share/poppler/cidToUnicode"
-          test -d "$output/share/poppler/nameToUnicode"
-          test -d "$output/share/poppler/unicodeMap"
+          if (!(Test-Path "$output/rag_pipeline_test.exe")) { throw "Executable packaging failed." }
+          if (!(Test-Path "$output/onnxruntime.dll")) { throw "ONNX Runtime packaging failed." }
 
       - name: Upload runnable Windows package
         uses: actions/upload-artifact@v4
