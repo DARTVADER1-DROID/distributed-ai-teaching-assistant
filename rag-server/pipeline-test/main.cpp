@@ -9,7 +9,6 @@
 #include <iostream>
 #include <iterator>
 #include <memory>
-#include <stdexcept>
 #include <string>
 #include <type_traits>
 #include <utility>
@@ -18,8 +17,6 @@
 namespace {
 
 using SteadyClock = std::chrono::steady_clock;
-std::streambuf* protocol_output_buffer = nullptr;
-std::streambuf* protocol_output_buffer = nullptr;
 
 struct StageTiming {
     std::string name;
@@ -146,55 +143,21 @@ void printHeadingPath(const std::vector<std::string>& heading_path) {
     }
 }
 
-std::string base64Encode(const std::string& input) {
-    static constexpr char alphabet[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    std::string output;
-    output.reserve(((input.size() + 2) / 3) * 4);
-    for (std::size_t i = 0; i < input.size(); i += 3) {
-        const std::uint32_t a = static_cast<unsigned char>(input[i]);
-        const std::uint32_t b = i + 1 < input.size() ? static_cast<unsigned char>(input[i + 1]) : 0;
-        const std::uint32_t c = i + 2 < input.size() ? static_cast<unsigned char>(input[i + 2]) : 0;
-        const std::uint32_t value = (a << 16) | (b << 8) | c;
-        output.push_back(alphabet[(value >> 18) & 0x3F]);
-        output.push_back(alphabet[(value >> 12) & 0x3F]);
-        output.push_back(i + 1 < input.size() ? alphabet[(value >> 6) & 0x3F] : '=');
-        output.push_back(i + 2 < input.size() ? alphabet[value & 0x3F] : '=');
+// Temporary test-only proxy. The production tokenizer will be supplied by the
+// C# application layer; this counts UTF-8 code points, not model tokens.
+std::size_t countUtf8CodePoints(const std::string& text) {
+    std::size_t count = 0;
+    for (const unsigned char value : text) {
+        if ((value & 0xC0) != 0x80) {
+            ++count;
+        }
     }
-    return output;
-}
-
-std::size_t requestTokenCount(const std::string& text) {
-    auto* current_output = std::cout.rdbuf();
-    std::cout.rdbuf(protocol_output_buffer);
-    std::cout << "TOKENIZE\t" << base64Encode(text) << '\n' << std::flush;
-    std::cout.rdbuf(current_output);
-    std::string response;
-    if (!std::getline(std::cin, response) || response.rfind("COUNT\t", 0) != 0)
-        throw std::runtime_error("Tokenizer host disconnected or returned an invalid response.");
-    const std::string count_text = response.substr(6);
-    std::size_t consumed = 0;
-    const unsigned long long count = std::stoull(count_text, &consumed);
-    if (consumed != count_text.size())
-        throw std::runtime_error("Tokenizer host returned an invalid token count.");
-    return static_cast<std::size_t>(count);
-}
-
-void emitChunkProtocol(const rag::DocumentChunk& chunk) {
-    std::cout << "CHUNK\t" << chunk.index << '\t' << base64Encode(chunk.text)
-              << '\t' << base64Encode(chunk.embedding_text)
-              << '\t' << chunk.heading_path.size();
-    for (const auto& heading : chunk.heading_path)
-        std::cout << '\t' << base64Encode(heading);
-    std::cout << '\t' << chunk.start_page_number << '\t' << chunk.start_line_number
-              << '\t' << chunk.end_page_number << '\t' << chunk.end_line_number
-              << '\n' << std::flush;
+    return count;
 }
 
 } // namespace
 
 int main(int argc, char* argv[]) {
-    protocol_output_buffer = std::cout.rdbuf();
-    std::cout.rdbuf(std::cerr.rdbuf());
     const auto program_start = SteadyClock::now();
     std::vector<StageTiming> timings;
 
@@ -298,7 +261,7 @@ int main(int argc, char* argv[]) {
     });
 
     rag::ChunkerConfig chunker_config;
-    const rag::TokenCounter test_counter = requestTokenCount;
+    const rag::TokenCounter test_counter = countUtf8CodePoints;
 
     std::unique_ptr<rag::ChunkerService> chunker;
     measureStage(timings, "Chunker initialization", [&] {
@@ -310,7 +273,7 @@ int main(int argc, char* argv[]) {
     std::cout << "\n[3/3] STRUCTURE-AWARE CHUNKING\n"
               << "----------------------------------------\n"
               << "Configured maximum: " << chunker_config.max_chunk_tokens
-              << " BGE-M3 tokenizer tokens\n\n";
+              << " UTF-8 code points (temporary test proxy; not model tokens)\n\n";
 
     const rag::ChunkingResult chunking =
         measureStage(timings, "Structure-aware chunking", [&] {
@@ -329,7 +292,7 @@ int main(int argc, char* argv[]) {
 
     measureStage(timings, "Chunk result rendering", [&] {
         for (const auto& chunk : chunking.chunks) {
-            const std::size_t count = requestTokenCount(chunk.embedding_text);
+            const std::size_t count = countUtf8CodePoints(chunk.embedding_text);
 
             std::cout << "========================================\n"
                       << "CHUNK " << chunk.index << '\n'
@@ -337,7 +300,7 @@ int main(int argc, char* argv[]) {
                       << "Heading path: ";
             printHeadingPath(chunk.heading_path);
 
-            std::cout << "\nBGE-M3 token count: " << count
+            std::cout << "\nUTF-8 code-point count: " << count
                       << " / " << chunker_config.max_chunk_tokens << '\n'
                       << "Source start: ";
             printSourcePosition(
@@ -355,14 +318,12 @@ int main(int argc, char* argv[]) {
     });
 
     std::cout << "CHUNKING CHECK: PASSED\n"
-              << "Chunk boundaries were calculated with the BGE-M3 tokenizer.\n"
-              << "Sending chunks to the C# embedding host...\n";
-
-    std::cout.rdbuf(protocol_output_buffer);
-    for (const auto& chunk : chunking.chunks)
-        emitChunkProtocol(chunk);
-    std::cout << "DONE\n" << std::flush;
-    std::cout.rdbuf(std::cerr.rdbuf());
+              << "This test used a UTF-8 code-point proxy. The C# application "
+                 "must supply the exact model tokenizer before embeddings "
+                 "are enabled.\n"
+              << "\n========================================\n"
+              << " PIPELINE COMPLETED THROUGH CHUNKING\n"
+              << "========================================\n";
 
     printTimingReport(timings, program_start);
     return 0;
