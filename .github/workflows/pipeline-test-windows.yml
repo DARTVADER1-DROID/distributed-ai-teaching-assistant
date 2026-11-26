@@ -47,11 +47,11 @@ jobs:
           & C:/vcpkg-rag/bootstrap-vcpkg.bat -disableMetrics
           if ($LASTEXITCODE -ne 0) { throw "vcpkg bootstrap failed." }
 
-      - name: Configure MSVC x64 build and install dependencies
+      - name: Configure Windows x64 build and install dependencies
         shell: pwsh
         run: |
-          cmake -S rag-server/pipeline-test -B C:/bld/rag-pipeline -G "Visual Studio 17 2022" -A x64 -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg-rag/scripts/buildsystems/vcpkg.cmake -DVCPKG_MANIFEST_DIR="$env:GITHUB_WORKSPACE/rag-server" -DVCPKG_INSTALLED_DIR=C:/vcpkg-rag_installed -DVCPKG_TARGET_TRIPLET=x64-windows -DVCPKG_MANIFEST_INSTALL=ON
-          if ($LASTEXITCODE -ne 0) { throw "MSVC CMake configuration or vcpkg dependency installation failed." }
+          cmake -S rag-server/pipeline-test -B C:/bld/rag-pipeline -A x64 -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg-rag/scripts/buildsystems/vcpkg.cmake -DVCPKG_MANIFEST_DIR="$env:GITHUB_WORKSPACE/rag-server" -DVCPKG_INSTALLED_DIR=C:/vcpkg-rag_installed -DVCPKG_TARGET_TRIPLET=x64-windows -DVCPKG_MANIFEST_INSTALL=ON
+          if ($LASTEXITCODE -ne 0) { throw "CMake configuration or vcpkg dependency installation failed." }
 
       - name: Build executable
         shell: pwsh
