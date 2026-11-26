@@ -30,7 +30,7 @@ if(NOT EXISTS "${RAG_ONNXRUNTIME_PACKAGE}/build/native/include/onnxruntime_cxx_a
     if(NOT EXISTS "${RAG_ONNXRUNTIME_ARCHIVE}")
         message(STATUS "Downloading pinned ONNX Runtime ${RAG_ONNXRUNTIME_VERSION}")
         file(DOWNLOAD
-            "https://github.com/microsoft/onnxruntime/releases/download/v${RAG_ONNXRUNTIME_VERSION}/microsoft.ml.onnxruntime.${RAG_ONNXRUNTIME_VERSION}.zip"
+            "https://api.nuget.org/v3-flatcontainer/microsoft.ml.onnxruntime/${RAG_ONNXRUNTIME_VERSION}/microsoft.ml.onnxruntime.${RAG_ONNXRUNTIME_VERSION}.nupkg"
             "${RAG_ONNXRUNTIME_ARCHIVE}"
             TLS_VERIFY ON
             SHOW_PROGRESS
@@ -45,9 +45,10 @@ if(NOT EXISTS "${RAG_ONNXRUNTIME_PACKAGE}/build/native/include/onnxruntime_cxx_a
         endif()
     endif()
 
+    file(MAKE_DIRECTORY "${RAG_ONNXRUNTIME_PACKAGE}")
     file(ARCHIVE_EXTRACT
         INPUT "${RAG_ONNXRUNTIME_ARCHIVE}"
-        DESTINATION "${RAG_ONNXRUNTIME_ROOT}"
+        DESTINATION "${RAG_ONNXRUNTIME_PACKAGE}"
     )
 endif()
 
@@ -64,7 +65,7 @@ set_target_properties(rag_onnxruntime PROPERTIES
     IMPORTED_LOCATION
         "${RAG_ONNXRUNTIME_PACKAGE}/runtimes/win-x64/native/onnxruntime.dll"
     INTERFACE_INCLUDE_DIRECTORIES
-        "${RAG_ONNXRUNTIME_PACKAGE}/include"
+        "${RAG_ONNXRUNTIME_PACKAGE}/build/native/include"
 )
 
 # tokenizers-cpp reads the Hugging Face tokenizer.json format and includes its
