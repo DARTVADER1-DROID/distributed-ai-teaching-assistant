@@ -18,3 +18,6 @@ target_link_libraries(rag_pipeline_test
         rag_extractor
         rag_chunker
 )
+
+# The C# host launches this native executable and supplies the exact BGE-M3 tokenizer.
+set_target_properties(rag_pipeline_test PROPERTIES OUTPUT_NAME "rag_pipeline_native")
