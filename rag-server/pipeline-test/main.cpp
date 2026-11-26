@@ -2,15 +2,83 @@
 #include "extractor_service.hpp"
 #include "chunker_service.hpp"
 
+#include <chrono>
 #include <cctype>
 #include <cstdint>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <iterator>
+#include <memory>
 #include <string>
+#include <type_traits>
+#include <utility>
 #include <vector>
 
 namespace {
+
+using SteadyClock = std::chrono::steady_clock;
+
+struct StageTiming {
+    std::string name;
+    SteadyClock::duration elapsed;
+};
+
+template <typename Callable>
+auto measureStage(
+    std::vector<StageTiming>& timings,
+    const std::string& name,
+    Callable&& callable
+) -> std::invoke_result_t<Callable> {
+    const auto start = SteadyClock::now();
+
+    try {
+        if constexpr (std::is_void_v<std::invoke_result_t<Callable>>) {
+            std::forward<Callable>(callable)();
+            timings.push_back({name, SteadyClock::now() - start});
+        } else {
+            auto result = std::forward<Callable>(callable)();
+            timings.push_back({name, SteadyClock::now() - start});
+            return result;
+        }
+    } catch (...) {
+        timings.push_back({name, SteadyClock::now() - start});
+        throw;
+    }
+}
+
+double toMilliseconds(SteadyClock::duration duration) {
+    return std::chrono::duration<double, std::milli>(duration).count();
+}
+
+void printTimingReport(
+    const std::vector<StageTiming>& timings,
+    SteadyClock::time_point program_start
+) {
+    std::cout << "\n========================================\n"
+              << " EXECUTION TIMINGS\n"
+              << "========================================\n";
+
+    if (timings.empty()) {
+        std::cout << "No processing stages were executed.\n";
+    } else {
+        for (const auto& timing : timings) {
+            std::cout << std::left << std::setw( 30 )
+                      << timing.name << std::right
+                      << std::fixed << std::setprecision(3)
+                      << toMilliseconds(timing.elapsed) << " ms\n";
+        }
+    }
+
+    std::cout << "----------------------------------------\n"
+              << std::left << std::setw( 30 )
+              << "TOTAL PROGRAM TIME" << std::right
+              << std::fixed << std::setprecision(3)
+              << toMilliseconds(SteadyClock::now() - program_start)
+              << " ms\n"
+              << "========================================\n"
+              << "Times use a monotonic high-resolution clock.\n";
+}
 
 // Temporary test-only tokenizer. It counts whitespace-separated tokens.
 // This is deliberately NOT presented as the BGE-M3 tokenizer.
@@ -101,11 +169,15 @@ void printHeadingPath(const std::vector<std::string>& heading_path) {
 } // namespace
 
 int main(int argc, char* argv[]) {
+    const auto program_start = SteadyClock::now();
+    std::vector<StageTiming> timings;
+
     if (argc != 2) {
         std::cerr << "Usage:\n"
                   << "  rag_pipeline_test.exe <path-to-pdf>\n\n"
                   << "Example:\n"
                   << "  rag_pipeline_test.exe \"C:\\Users\\You\\Documents\\sample.pdf\"\n";
+        printTimingReport(timings, program_start);
         return 2;
     }
 
@@ -117,136 +189,180 @@ int main(int argc, char* argv[]) {
               << "========================================\n"
               << "Input: " << pdf_path << "\n\n";
 
-    if (!readPdf(pdf_path, pdf_bytes)) {
+    const bool pdf_read = measureStage(timings, "PDF file read", [&] {
+        return readPdf(pdf_path, pdf_bytes);
+    });
+    if (!pdf_read) {
+        printTimingReport(timings, program_start);
         return 2;
     }
 
-    // Keep typography rules identical across validation and extraction.
     rag::DocumentFormatConfig format_config;
     rag::ValidatorConfig validator_config;
-    static_cast<rag::DocumentFormatConfig&>(validator_config) = format_config;
+    std::unique_ptr<rag::ValidatorService> validator;
 
-    const rag::ValidatorService validator(validator_config);
+    measureStage(timings, "Configuration + validator setup", [&] {
+        static_cast<rag::DocumentFormatConfig&>(validator_config) = format_config;
+        validator = std::make_unique<rag::ValidatorService>(validator_config);
+    });
 
     std::cout << "[1/3] VALIDATION\n"
               << "----------------------------------------\n";
 
     const rag::ValidationReport validation =
-        validator.validatePdf(pdf_bytes);
+        measureStage(timings, "PDF validation", [&] {
+            return validator->validatePdf(pdf_bytes);
+        });
 
     if (!validation.isValid()) {
-        std::cout << "RESULT: FAILED (" << validation.issues.size()
-                  << " issue(s))\n\n";
+        measureStage(timings, "Validation error reporting", [&] {
+            std::cout << "RESULT: FAILED (" << validation.issues.size()
+                      << " issue(s))\n\n";
 
-        for (std::size_t i = 0; i < validation.issues.size(); ++i) {
-            const auto& issue = validation.issues[i];
-            std::cout << (i + 1) << ". " << issue.reason << '\n';
+            for (std::size_t i = 0; i < validation.issues.size(); ++i) {
+                const auto& issue = validation.issues[i];
+                std::cout << (i + 1) << ". " << issue.reason << '\n';
 
-            if (issue.page_number > 0) {
-                std::cout << "   Page: " << issue.page_number << '\n';
+                if (issue.page_number > 0) {
+                    std::cout << "   Page: " << issue.page_number << '\n';
+                }
+                if (issue.line_number > 0) {
+                    std::cout << "   Line: " << issue.line_number << '\n';
+                }
+                if (issue.word_count > 0) {
+                    std::cout << "   Word count: " << issue.word_count << '\n';
+                }
+                if (!issue.line_text.empty()) {
+                    std::cout << "   Text: " << issue.line_text << '\n';
+                }
             }
-            if (issue.line_number > 0) {
-                std::cout << "   Line: " << issue.line_number << '\n';
-            }
-            if (issue.word_count > 0) {
-                std::cout << "   Word count: " << issue.word_count << '\n';
-            }
-            if (!issue.line_text.empty()) {
-                std::cout << "   Text: " << issue.line_text << '\n';
-            }
-        }
 
-        std::cout << "\nExtraction and chunking were not started because "
-                     "validation failed.\n";
+            std::cout << "\nExtraction and chunking were not started because "
+                         "validation failed.\n";
+        });
+
+        printTimingReport(timings, program_start);
         return 1;
     }
 
     std::cout << "RESULT: PASSED\n"
               << "No validation rule violations were reported.\n\n";
 
+    std::unique_ptr<rag::ExtractorService> extractor;
+    measureStage(timings, "Extractor initialization", [&] {
+        extractor = std::make_unique<rag::ExtractorService>(format_config);
+    });
+
     std::cout << "[2/3] HIERARCHICAL EXTRACTION\n"
               << "----------------------------------------\n";
 
-    const rag::ExtractorService extractor(format_config);
     const rag::ExtractionResult extraction =
-        extractor.extractPdf(pdf_bytes);
+        measureStage(timings, "Hierarchical extraction", [&] {
+            return extractor->extractPdf(pdf_bytes);
+        });
 
     if (!extraction.is_successful) {
         std::cout << "RESULT: FAILED\n"
                   << "Reason: " << extraction.error << '\n';
+        printTimingReport(timings, program_start);
         return 1;
     }
 
     std::cout << "RESULT: PASSED\n\n"
               << "Extracted document tree:\n";
-    printTree(extraction.document);
+    measureStage(timings, "Extracted tree rendering", [&] {
+        printTree(extraction.document);
+    });
 
-    std::cout << "\n[3/3] STRUCTURE-AWARE CHUNKING\n"
-              << "----------------------------------------\n";
-
-    // The configured limit comes from rag-server/config/chunker_config.hpp.
     rag::ChunkerConfig chunker_config;
     const rag::TokenCounter test_tokenizer = countTestTokens;
+    std::unique_ptr<rag::ChunkerService> chunker;
 
-    std::cout << "Configured maximum: " << chunker_config.max_chunk_tokens
+    measureStage(timings, "Chunker initialization", [&] {
+        chunker = std::make_unique<rag::ChunkerService>(
+            chunker_config, test_tokenizer
+        );
+    });
+
+    std::cout << "\n[3/3] STRUCTURE-AWARE CHUNKING\n"
+              << "----------------------------------------\n"
+              << "Configured maximum: " << chunker_config.max_chunk_tokens
               << " test tokens\n"
               << "Tokenizer: TEST ONLY (whitespace-separated tokens)\n"
               << "Note: counts are not BGE-M3 token counts.\n\n";
 
-    const rag::ChunkerService chunker(chunker_config, test_tokenizer);
-    const rag::ChunkingResult chunking = chunker.chunkDocument(extraction);
+    const rag::ChunkingResult chunking =
+        measureStage(timings, "Structure-aware chunking", [&] {
+            return chunker->chunkDocument(extraction);
+        });
 
     if (!chunking.is_successful) {
         std::cout << "RESULT: FAILED\n"
                   << "Reason: " << chunking.error << '\n';
+        printTimingReport(timings, program_start);
         return 1;
     }
 
     std::cout << "RESULT: PASSED\n"
               << "Generated chunks: " << chunking.chunks.size() << "\n\n";
 
-    bool token_limit_ok = true;
-    for (const auto& chunk : chunking.chunks) {
-        const std::size_t token_count =
-            test_tokenizer(chunk.embedding_text);
-        if (token_count > chunker_config.max_chunk_tokens) {
-            token_limit_ok = false;
+    const bool token_limit_ok =
+        measureStage(timings, "Chunk token-limit verification", [&] {
+            for (const auto& chunk : chunking.chunks) {
+                if (test_tokenizer(chunk.embedding_text) >
+                    chunker_config.max_chunk_tokens) {
+                    return false;
+                }
+            }
+            return true;
+        });
+
+    measureStage(timings, "Chunk result rendering", [&] {
+        for (const auto& chunk : chunking.chunks) {
+            const std::size_t token_count =
+                test_tokenizer(chunk.embedding_text);
+
+            std::cout << "========================================\n"
+                      << "CHUNK " << chunk.index << '\n'
+                      << "========================================\n"
+                      << "Heading path: ";
+            printHeadingPath(chunk.heading_path);
+
+            std::cout << "\nTest token count: " << token_count
+                      << " / " << chunker_config.max_chunk_tokens
+                      << (token_count <= chunker_config.max_chunk_tokens
+                              ? " [OK]\n"
+                              : " [LIMIT EXCEEDED]\n");
+
+            std::cout << "\nSource start: ";
+            printSourcePosition(
+                chunk.start_page_number, chunk.start_line_number
+            );
+            std::cout << "\nSource end:   ";
+            printSourcePosition(
+                chunk.end_page_number, chunk.end_line_number
+            );
+            std::cout << "\n\n"
+                      << "Original chunk text:\n"
+                      << chunk.text << "\n\n"
+                      << "Embedding input (heading context + text):\n"
+                      << chunk.embedding_text << "\n\n";
         }
-
-        std::cout << "========================================\n"
-                  << "CHUNK " << chunk.index << '\n'
-                  << "========================================\n"
-                  << "Heading path: ";
-        printHeadingPath(chunk.heading_path);
-
-        std::cout << "\nTest token count: " << token_count
-                  << " / " << chunker_config.max_chunk_tokens
-                  << (token_count <= chunker_config.max_chunk_tokens
-                          ? " [OK]\n"
-                          : " [LIMIT EXCEEDED]\n")
-                  ;
-        std::cout << "\nSource start: ";
-        printSourcePosition(chunk.start_page_number, chunk.start_line_number);
-        std::cout << "\nSource end:   ";
-        printSourcePosition(chunk.end_page_number, chunk.end_line_number);
-        std::cout << "\n\n"
-                  << "Original chunk text:\n"
-                  << chunk.text << "\n\n"
-                  << "Embedding input (heading context + text):\n"
-                  << chunk.embedding_text << "\n\n";
-    }
+    });
 
     if (!token_limit_ok) {
         std::cout << "CHUNKING CHECK: FAILED - a chunk exceeded the "
                      "configured test-token limit.\n";
+        printTimingReport(timings, program_start);
         return 1;
     }
 
     std::cout << "CHUNKING CHECK: PASSED - all chunks are within the "
-                 "configured test-token limit.\n";
-
-    std::cout << "\n========================================\n"
+                 "configured test-token limit.\n"
+              << "\n========================================\n"
               << " PIPELINE COMPLETED SUCCESSFULLY\n"
               << "========================================\n";
+
+    printTimingReport(timings, program_start);
     return 0;
 }
