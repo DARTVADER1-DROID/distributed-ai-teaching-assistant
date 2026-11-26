@@ -1,10 +1,8 @@
 #include "validator_service.hpp"
 #include "extractor_service.hpp"
 #include "chunker_service.hpp"
-#include "embedding_service.hpp"
 
 #include <chrono>
-#include <cmath>
 #include <cstdint>
 #include <fstream>
 #include <iomanip>
@@ -60,15 +58,11 @@ void printTimingReport(
               << " EXECUTION TIMINGS\n"
               << "========================================\n";
 
-    if (timings.empty()) {
-        std::cout << "No processing stages were executed.\n";
-    } else {
-        for (const auto& timing : timings) {
-            std::cout << std::left << std::setw(30)
-                      << timing.name << std::right
-                      << std::fixed << std::setprecision(3)
-                      << toMilliseconds(timing.elapsed) << " ms\n";
-        }
+    for (const auto& timing : timings) {
+        std::cout << std::left << std::setw(30)
+                  << timing.name << std::right
+                  << std::fixed << std::setprecision(3)
+                  << toMilliseconds(timing.elapsed) << " ms\n";
     }
 
     std::cout << "----------------------------------------\n"
@@ -79,6 +73,29 @@ void printTimingReport(
               << " ms\n"
               << "========================================\n"
               << "Times use a monotonic high-resolution clock.\n";
+}
+
+bool readPdf(const std::string& path, std::vector<std::uint8_t>& bytes) {
+    std::ifstream input(path, std::ios::binary);
+    if (!input) {
+        std::cerr << "ERROR: Cannot open PDF: " << path << '\n';
+        return false;
+    }
+
+    bytes.assign(
+        std::istreambuf_iterator<char>(input),
+        std::istreambuf_iterator<char>()
+    );
+
+    if (input.bad()) {
+        std::cerr << "ERROR: Failed while reading PDF: " << path << '\n';
+        return false;
+    }
+    if (bytes.empty()) {
+        std::cerr << "ERROR: The selected PDF is empty.\n";
+        return false;
+    }
+    return true;
 }
 
 void printSourcePosition(std::size_t page_number, std::size_t line_number) {
@@ -112,29 +129,6 @@ void printTree(const rag::DocumentNode& node, std::size_t depth = 0) {
     }
 }
 
-bool readPdf(const std::string& path, std::vector<std::uint8_t>& bytes) {
-    std::ifstream input(path, std::ios::binary);
-    if (!input) {
-        std::cerr << "ERROR: Cannot open PDF: " << path << '\n';
-        return false;
-    }
-
-    bytes.assign(
-        std::istreambuf_iterator<char>(input),
-        std::istreambuf_iterator<char>()
-    );
-
-    if (input.bad()) {
-        std::cerr << "ERROR: Failed while reading PDF: " << path << '\n';
-        return false;
-    }
-    if (bytes.empty()) {
-        std::cerr << "ERROR: The selected PDF is empty.\n";
-        return false;
-    }
-    return true;
-}
-
 void printHeadingPath(const std::vector<std::string>& heading_path) {
     if (heading_path.empty()) {
         std::cout << "(document root)";
@@ -149,33 +143,16 @@ void printHeadingPath(const std::vector<std::string>& heading_path) {
     }
 }
 
-double calculateL2Norm(const std::vector<float>& values) {
-    double squared_sum = 0.0;
-    for (const float value : values) {
-        squared_sum += static_cast<double>(value) * value;
-    }
-    return std::sqrt(squared_sum);
-}
-
-void printEmbeddingVector(const std::vector<float>& values) {
-    std::cout << "Dense vector values (" << values.size()
-              << " dimensions):\n";
-
-    constexpr std::size_t values_per_line = 8;
-    for (std::size_t i = 0; i < values.size(); ++i) {
-        if (i % values_per_line == 0) {
-            std::cout << "  [" << std::setw(4) << i << "] ";
-        }
-
-        std::cout << std::fixed << std::setprecision(6) << values[i];
-
-        if (i + 1 < values.size()) {
-            std::cout << ", ";
-        }
-        if ((i + 1) % values_per_line == 0 || i + 1 == values.size()) {
-            std::cout << '\n';
+// Temporary test-only proxy. The production tokenizer will be supplied by the
+// C# application layer; this counts UTF-8 code points, not model tokens.
+std::size_t countUtf8CodePoints(const std::string& text) {
+    std::size_t count = 0;
+    for (const unsigned char value : text) {
+        if ((value & 0xC0) != 0x80) {
+            ++count;
         }
     }
+    return count;
 }
 
 } // namespace
@@ -184,29 +161,22 @@ int main(int argc, char* argv[]) {
     const auto program_start = SteadyClock::now();
     std::vector<StageTiming> timings;
 
-    if (argc != 4) {
+    if (argc != 2) {
         std::cerr << "Usage:\n"
-                  << "  rag_pipeline_test.exe <path-to-pdf> "
-                     "<path-to-model.onnx> <path-to-tokenizer.json>\n\n"
+                  << "  rag_pipeline_test.exe <path-to-pdf>\n\n"
                   << "Example:\n"
-                  << "  rag_pipeline_test.exe \"C:\\Users\\You\\Documents\\sample.pdf\" "
-                     "\"C:\\rag\\models\\bge-m3\\model.onnx\" "
-                     "\"C:\\rag\\models\\bge-m3\\tokenizer.json\"\n";
+                  << "  rag_pipeline_test.exe \"C:\\Users\\You\\Documents\\sample.pdf\"\n";
         printTimingReport(timings, program_start);
         return 2;
     }
 
     const std::string pdf_path = argv[1];
-    const std::string model_path = argv[2];
-    const std::string tokenizer_path = argv[3];
     std::vector<std::uint8_t> pdf_bytes;
 
     std::cout << "========================================\n"
-              << " RAG PDF VALIDATION + EXTRACTION + CHUNKING + EMBEDDING TEST\n"
+              << " RAG PDF VALIDATION + EXTRACTION + CHUNKING TEST\n"
               << "========================================\n"
-              << "PDF: " << pdf_path << '\n'
-              << "Model: " << model_path << '\n'
-              << "Tokenizer: " << tokenizer_path << "\n\n";
+              << "PDF: " << pdf_path << "\n\n";
 
     const bool pdf_read = measureStage(timings, "PDF file read", [&] {
         return readPdf(pdf_path, pdf_bytes);
@@ -225,7 +195,7 @@ int main(int argc, char* argv[]) {
         validator = std::make_unique<rag::ValidatorService>(validator_config);
     });
 
-    std::cout << "[1/4] VALIDATION\n"
+    std::cout << "[1/3] VALIDATION\n"
               << "----------------------------------------\n";
 
     const rag::ValidationReport validation =
@@ -234,32 +204,29 @@ int main(int argc, char* argv[]) {
         });
 
     if (!validation.isValid()) {
-        measureStage(timings, "Validation error reporting", [&] {
-            std::cout << "RESULT: FAILED (" << validation.issues.size()
-                      << " issue(s))\n\n";
+        std::cout << "RESULT: FAILED (" << validation.issues.size()
+                  << " issue(s))\n\n";
 
-            for (std::size_t i = 0; i < validation.issues.size(); ++i) {
-                const auto& issue = validation.issues[i];
-                std::cout << (i + 1) << ". " << issue.reason << '\n';
+        for (std::size_t i = 0; i < validation.issues.size(); ++i) {
+            const auto& issue = validation.issues[i];
+            std::cout << (i + 1) << ". " << issue.reason << '\n';
 
-                if (issue.page_number > 0) {
-                    std::cout << "   Page: " << issue.page_number << '\n';
-                }
-                if (issue.line_number > 0) {
-                    std::cout << "   Line: " << issue.line_number << '\n';
-                }
-                if (issue.word_count > 0) {
-                    std::cout << "   Word count: " << issue.word_count << '\n';
-                }
-                if (!issue.line_text.empty()) {
-                    std::cout << "   Text: " << issue.line_text << '\n';
-                }
+            if (issue.page_number > 0) {
+                std::cout << "   Page: " << issue.page_number << '\n';
             }
+            if (issue.line_number > 0) {
+                std::cout << "   Line: " << issue.line_number << '\n';
+            }
+            if (issue.word_count > 0) {
+                std::cout << "   Word count: " << issue.word_count << '\n';
+            }
+            if (!issue.line_text.empty()) {
+                std::cout << "   Text: " << issue.line_text << '\n';
+            }
+        }
 
-            std::cout << "\nExtraction, chunking and embedding were not started "
-                         "because validation failed.\n";
-        });
-
+        std::cout << "\nExtraction and chunking were not started because "
+                     "validation failed.\n";
         printTimingReport(timings, program_start);
         return 1;
     }
@@ -272,7 +239,7 @@ int main(int argc, char* argv[]) {
         extractor = std::make_unique<rag::ExtractorService>(format_config);
     });
 
-    std::cout << "[2/4] HIERARCHICAL EXTRACTION\n"
+    std::cout << "[2/3] HIERARCHICAL EXTRACTION\n"
               << "----------------------------------------\n";
 
     const rag::ExtractionResult extraction =
@@ -293,55 +260,20 @@ int main(int argc, char* argv[]) {
         printTree(extraction.document);
     });
 
-    rag::EmbeddingConfig embedding_config;
-    embedding_config.model_path = model_path;
-    embedding_config.tokenizer_path = tokenizer_path;
-
-    std::unique_ptr<rag::EmbeddingService> embedding_service;
-    measureStage(timings, "Embedding service construction", [&] {
-        embedding_service =
-            std::make_unique<rag::EmbeddingService>(embedding_config);
-    });
-
-    std::cout << "\n[3/4] BGE-M3 INITIALIZATION\n"
-              << "----------------------------------------\n";
-
-    const rag::EmbeddingOperationResult initialization =
-        measureStage(timings, "BGE-M3 model + tokenizer load", [&] {
-            return embedding_service->initialize();
-        });
-
-    if (!initialization.is_successful) {
-        std::cout << "RESULT: FAILED\n"
-                  << "Reason: " << initialization.error << '\n';
-        printTimingReport(timings, program_start);
-        return 1;
-    }
-
-    std::cout << "RESULT: PASSED\n"
-              << "Local model and tokenizer loaded successfully.\n"
-              << "Runtime mode: ONNX Runtime CPU\n"
-              << "Embedding dimensions: 1024\n"
-              << "Maximum sequence length: "
-              << embedding_config.max_sequence_length << " tokens\n\n";
-
     rag::ChunkerConfig chunker_config;
-    const rag::TokenCounter bge_tokenizer = [&](const std::string& text) {
-        return embedding_service->countTokens(text);
-    };
+    const rag::TokenCounter test_counter = countUtf8CodePoints;
 
     std::unique_ptr<rag::ChunkerService> chunker;
     measureStage(timings, "Chunker initialization", [&] {
         chunker = std::make_unique<rag::ChunkerService>(
-            chunker_config, bge_tokenizer
+            chunker_config, test_counter
         );
     });
 
-    std::cout << "[4/4] STRUCTURE-AWARE CHUNKING + EMBEDDING\n"
+    std::cout << "\n[3/3] STRUCTURE-AWARE CHUNKING\n"
               << "----------------------------------------\n"
               << "Configured maximum: " << chunker_config.max_chunk_tokens
-              << " BGE-M3 tokens\n"
-              << "Tokenizer: BGE-M3 tokenizer.json\n\n";
+              << " UTF-8 code points (temporary test proxy; not model tokens)\n\n";
 
     const rag::ChunkingResult chunking =
         measureStage(timings, "Structure-aware chunking", [&] {
@@ -358,26 +290,9 @@ int main(int argc, char* argv[]) {
     std::cout << "CHUNKING RESULT: PASSED\n"
               << "Generated chunks: " << chunking.chunks.size() << "\n\n";
 
-    std::vector<std::size_t> chunk_token_counts;
-    const bool token_limit_ok =
-        measureStage(timings, "BGE token-limit verification", [&] {
-            chunk_token_counts.reserve(chunking.chunks.size());
-            for (const auto& chunk : chunking.chunks) {
-                const std::size_t token_count =
-                    embedding_service->countTokens(chunk.embedding_text);
-                chunk_token_counts.push_back(token_count);
-
-                if (token_count > chunker_config.max_chunk_tokens) {
-                    return false;
-                }
-            }
-            return true;
-        });
-
     measureStage(timings, "Chunk result rendering", [&] {
-        for (std::size_t i = 0; i < chunking.chunks.size(); ++i) {
-            const auto& chunk = chunking.chunks[i];
-            const std::size_t token_count = chunk_token_counts[i];
+        for (const auto& chunk : chunking.chunks) {
+            const std::size_t count = countUtf8CodePoints(chunk.embedding_text);
 
             std::cout << "========================================\n"
                       << "CHUNK " << chunk.index << '\n'
@@ -385,13 +300,9 @@ int main(int argc, char* argv[]) {
                       << "Heading path: ";
             printHeadingPath(chunk.heading_path);
 
-            std::cout << "\nBGE-M3 token count: " << token_count
-                      << " / " << chunker_config.max_chunk_tokens
-                      << (token_count <= chunker_config.max_chunk_tokens
-                              ? " [OK]\n"
-                              : " [LIMIT EXCEEDED]\n");
-
-            std::cout << "\nSource start: ";
+            std::cout << "\nUTF-8 code-point count: " << count
+                      << " / " << chunker_config.max_chunk_tokens << '\n'
+                      << "Source start: ";
             printSourcePosition(
                 chunk.start_page_number, chunk.start_line_number
             );
@@ -399,87 +310,19 @@ int main(int argc, char* argv[]) {
             printSourcePosition(
                 chunk.end_page_number, chunk.end_line_number
             );
-            std::cout << "\n\n"
-                      << "Original chunk text:\n"
+            std::cout << "\n\nChunk text:\n"
                       << chunk.text << "\n\n"
-                      << "Embedding input (heading context + text):\n"
+                      << "Chunk input with heading context:\n"
                       << chunk.embedding_text << "\n\n";
         }
     });
 
-    if (!token_limit_ok) {
-        std::cout << "CHUNKING CHECK: FAILED - a chunk exceeded the "
-                     "configured BGE-M3 token limit.\n";
-        printTimingReport(timings, program_start);
-        return 1;
-    }
-
-    std::cout << "CHUNKING CHECK: PASSED - all chunks are within the "
-                 "configured BGE-M3 token limit.\n\n";
-
-    std::vector<rag::EmbeddingResult> embeddings;
-    const bool embedding_generation_ok =
-        measureStage(timings, "Embedding generation (all chunks)", [&] {
-            embeddings.reserve(chunking.chunks.size());
-
-            for (const auto& chunk : chunking.chunks) {
-                rag::EmbeddingResult result =
-                    embedding_service->embedText(chunk.embedding_text);
-
-                if (!result.is_successful) {
-                    std::cout << "EMBEDDING RESULT: FAILED for chunk "
-                              << chunk.index << '\n'
-                              << "Reason: " << result.error << '\n';
-                    return false;
-                }
-
-                embeddings.push_back(std::move(result));
-            }
-            return true;
-        });
-
-    if (!embedding_generation_ok) {
-        printTimingReport(timings, program_start);
-        return 1;
-    }
-
-    measureStage(timings, "Embedding result rendering", [&] {
-            for (std::size_t i = 0; i < embeddings.size(); ++i) {
-                const auto& vector = embeddings[i].dense_vector;
-                const double norm = calculateL2Norm(vector);
-
-                std::cout << "========================================\n"
-                          << "EMBEDDING FOR CHUNK "
-                          << chunking.chunks[i].index << '\n'
-                          << "========================================\n"
-                          << "Dimensions: " << vector.size() << '\n'
-                          << "L2 norm: " << std::fixed << std::setprecision(8)
-                          << norm << '\n'
-                          << "Normalization check: "
-                          << (std::abs(norm - 1.0) <= 1.0e-4
-                                  ? "PASSED"
-                                  : "FAILED")
-                          << "\n\n";
-                printEmbeddingVector(vector);
-                std::cout << '\n';
-            }
-    });
-
-    for (const auto& embedding : embeddings) {
-        if (embedding.dense_vector.size() != 1024 ||
-            std::abs(calculateL2Norm(embedding.dense_vector) - 1.0) > 1.0e-4) {
-            std::cout << "EMBEDDING CHECK: FAILED - unexpected vector "
-                         "dimensions or non-normalized output.\n";
-            printTimingReport(timings, program_start);
-            return 1;
-        }
-    }
-
-    std::cout << "EMBEDDING CHECK: PASSED - generated "
-              << embeddings.size()
-              << " normalized 1024-dimensional vector(s).\n"
+    std::cout << "CHUNKING CHECK: PASSED\n"
+              << "This test used a UTF-8 code-point proxy. The C# application "
+                 "must supply the exact model tokenizer before embeddings "
+                 "are enabled.\n"
               << "\n========================================\n"
-              << " PIPELINE COMPLETED SUCCESSFULLY\n"
+              << " PIPELINE COMPLETED THROUGH CHUNKING\n"
               << "========================================\n";
 
     printTimingReport(timings, program_start);
