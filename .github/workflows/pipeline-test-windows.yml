@@ -1,0 +1,100 @@
+name: Build RAG Pipeline Test (Windows)
+
+on:
+  push:
+    paths:
+      - "rag-server/validator/**"
+      - "rag-server/extractor/**"
+      - "rag-server/config/**"
+      - "rag-server/pipeline-test/**"
+      - ".github/workflows/pipeline-test-windows.yml"
+  pull_request:
+    paths:
+      - "rag-server/validator/**"
+      - "rag-server/extractor/**"
+      - "rag-server/config/**"
+      - "rag-server/pipeline-test/**"
+      - ".github/workflows/pipeline-test-windows.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up MSYS2 and install build dependencies
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            mingw-w64-x86_64-toolchain
+            mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-ninja
+            mingw-w64-x86_64-poppler
+            mingw-w64-x86_64-pkgconf
+
+      - name: Configure
+        run: >-
+          cmake -S rag-server/pipeline-test
+          -B rag-server/pipeline-test/build
+          -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build executable
+        run: cmake --build rag-server/pipeline-test/build --parallel
+
+      - name: Package executable and runtime DLLs
+        run: |
+          set -euo pipefail
+          exe="rag-server/pipeline-test/build/rag_pipeline_test.exe"
+          output="rag-server/pipeline-test/output"
+          test -s "$exe"
+          rm -rf "$output"
+          mkdir -p "$output"
+          cp "$exe" "$output/"
+
+          # Bundle MinGW and Poppler DLL dependencies beside the executable.
+          ldd "$exe" | awk '/=>/ { print $3 } /^\// { print $1 }' |
+            grep '^/mingw64/bin/.*\.dll$' |
+            sort -u |
+            while IFS= read -r dll; do
+              test -f "$dll"
+              cp -u "$dll" "$output/"
+            done
+
+          cat > "$output/README.txt" <<'EOF'
+          RAG Validator + Extractor Pipeline Test (Windows x64)
+
+          1. Extract this entire folder.
+          2. Open Command Prompt or PowerShell in this folder.
+          3. Run:
+             .\rag_pipeline_test.exe "C:\full\path\to\your-document.pdf"
+
+          The program validates the PDF first. If validation passes, it runs
+          hierarchical extraction and prints the document tree.
+
+          Keep the DLL files beside the EXE. Do not move the EXE by itself.
+          Exit code 0 = both stages passed.
+          Exit code 1 = validation or extraction failed.
+          Exit code 2 = invalid command line or input file read failure.
+          EOF
+
+          test -s "$output/rag_pipeline_test.exe"
+          test -s "$output/README.txt"
+
+      - name: Upload runnable Windows package
+        uses: actions/upload-artifact@v4
+        with:
+          name: rag-pipeline-test-windows-x64
+          path: rag-server/pipeline-test/output/
+          if-no-files-found: error
+          retention-days: 14
