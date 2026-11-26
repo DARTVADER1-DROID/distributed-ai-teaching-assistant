@@ -21,7 +21,7 @@ does not run validation again.
 The result contains:
 
 - `is_successful` and `error` for operation status.
-- A recursive `DocumentNode` tree.
+- A recursive `DocumentNode` tree, with the PDF page count on the document root.
 - Node types: `Document`, `Heading`, and `Paragraph`.
 - A `heading_level` value for heading nodes.
 - One-based page and visual-line positions, including the end position of
