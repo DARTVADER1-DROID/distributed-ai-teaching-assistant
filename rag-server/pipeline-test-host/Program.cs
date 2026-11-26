@@ -103,7 +103,7 @@ internal static class Program
             {
                 if (line.StartsWith("TOKENIZE\t", StringComparison.Ordinal))
                 {
-                    var encodedText = line[8..];
+                    var encodedText = line[9..];
                     var text = Encoding.UTF8.GetString(Convert.FromBase64String(encodedText));
                     var tokenCount = embeddingService.CountTokens(text);
                     awaitWriteResponse(process, tokenCount);
