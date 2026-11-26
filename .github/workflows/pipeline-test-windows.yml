@@ -5,6 +5,7 @@ on:
     paths:
       - "rag-server/validator/**"
       - "rag-server/extractor/**"
+      - "rag-server/chunker/**"
       - "rag-server/config/**"
       - "rag-server/pipeline-test/**"
       - ".github/workflows/pipeline-test-windows.yml"
@@ -92,7 +93,8 @@ jobs:
              .\rag_pipeline_test.exe "C:\full\path\to\your-document.pdf"
 
           The program validates the PDF first. If validation passes, it runs
-          hierarchical extraction and prints the document tree.
+          hierarchical extraction and prints the document tree. The chunker
+          library is included in this build and is ready for tokenizer wiring.
 
           Keep the DLL files and the share\poppler data directory in their
           original locations beside the EXE. Do not move the EXE by itself.
