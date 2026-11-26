@@ -4,6 +4,7 @@
 #include <tokenizers_cpp.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <fstream>
@@ -46,6 +47,10 @@ public:
 
     EmbeddingOperationResult initialize() {
         EmbeddingOperationResult result;
+        if (initialized_) {
+            result.is_successful = true;
+            return result;
+        }
 
         try {
             if (config_.model_path.empty()) {
@@ -95,11 +100,15 @@ public:
         } catch (const std::exception& exception) {
             session_.reset();
             tokenizer_.reset();
+            input_names_.clear();
+            output_names_.clear();
             result.error = "BGE-M3 initialization failed: " +
                            describeException(exception);
         } catch (...) {
             session_.reset();
             tokenizer_.reset();
+            input_names_.clear();
+            output_names_.clear();
             result.error =
                 "BGE-M3 initialization failed due to an unknown error.";
         }
@@ -211,7 +220,6 @@ public:
             );
 
             const Ort::Value* dense_output = nullptr;
-            bool output_is_token_sequence = false;
 
             // Support the common BGE-M3 ONNX export contracts:
             //  - a ready-made dense sentence vector [1, 1024]
@@ -233,7 +241,6 @@ public:
                     shape[0] == 1 &&
                     shape[1] == static_cast<int64_t>(kBgeM3EmbeddingDimensions)) {
                     dense_output = &output;
-                    output_is_token_sequence = false;
                     break;
                 }
 
@@ -244,7 +251,6 @@ public:
                         static_cast<int64_t>(kBgeM3EmbeddingDimensions) &&
                     dense_output == nullptr) {
                     dense_output = &output;
-                    output_is_token_sequence = true;
                 }
             }
 
@@ -262,10 +268,9 @@ public:
             }
 
             result.dense_vector.resize(kBgeM3EmbeddingDimensions);
-            const std::size_t source_offset =
-                output_is_token_sequence ? 0 : 0;
+            // For a 3-D encoder output, the first sequence position is CLS.
             std::copy_n(
-                output_data + source_offset,
+                output_data,
                 kBgeM3EmbeddingDimensions,
                 result.dense_vector.begin()
             );
