@@ -1,0 +1,75 @@
+name: Build PDF Extractor (Windows)
+
+on:
+  push:
+    paths:
+      - "rag-server/extractor/**"
+      - "rag-server/config/**"
+      - ".github/workflows/extractor-windows.yml"
+  pull_request:
+    paths:
+      - "rag-server/extractor/**"
+      - "rag-server/config/**"
+      - ".github/workflows/extractor-windows.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up MSYS2 and install build dependencies
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            mingw-w64-x86_64-toolchain
+            mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-ninja
+            mingw-w64-x86_64-poppler
+            mingw-w64-x86_64-pkgconf
+
+      - name: Configure
+        run: cmake -S rag-server/extractor -B rag-server/extractor/build -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build rag-server/extractor/build --parallel
+
+      - name: Prepare C++ library package
+        run: |
+          set -euo pipefail
+          library="rag-server/extractor/build/librag_extractor.a"
+          output="rag-server/extractor/output"
+          test -f "$library"
+          rm -rf "$output"
+          mkdir -p "$output/include/extractor" "$output/include/config" "$output/lib"
+          cp rag-server/extractor/extractor_service.hpp "$output/include/extractor/"
+          cp rag-server/config/document_format_config.hpp "$output/include/config/"
+          cp "$library" "$output/lib/"
+          cat > "$output/README-LIBRARY.txt" <<'EOF'
+          RAG PDF Extractor - Windows x64 C++ library
+
+          This package contains the compiled static library and public headers.
+          It is not a standalone executable. Link it into your C++ application
+          and also link the Poppler C++ and Poppler libraries.
+          EOF
+          test -s "$output/lib/librag_extractor.a"
+          test -f "$output/include/extractor/extractor_service.hpp"
+          test -f "$output/include/config/document_format_config.hpp"
+
+      - name: Upload extractor library package
+        uses: actions/upload-artifact@v4
+        with:
+          name: extractor-windows-x64-library
+          path: rag-server/extractor/output/
+          if-no-files-found: error
+          retention-days: 14
