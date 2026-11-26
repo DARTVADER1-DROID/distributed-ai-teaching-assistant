@@ -40,6 +40,7 @@ jobs:
             mingw-w64-x86_64-cmake
             mingw-w64-x86_64-ninja
             mingw-w64-x86_64-poppler
+            mingw-w64-x86_64-poppler-data
             mingw-w64-x86_64-pkgconf
 
       - name: Configure
@@ -52,7 +53,7 @@ jobs:
       - name: Build executable
         run: cmake --build rag-server/pipeline-test/build --parallel
 
-      - name: Package executable and runtime DLLs
+      - name: Package executable and runtime resources
         run: |
           set -euo pipefail
           exe="rag-server/pipeline-test/build/rag_pipeline_test.exe"
@@ -71,6 +72,17 @@ jobs:
               cp -u "$dll" "$output/"
             done
 
+          # Poppler is built as relocatable by MSYS2. Its runtime data lookup
+          # resolves this directory relative to the Poppler DLL location.
+          poppler_data="/mingw64/share/poppler"
+          test -d "$poppler_data"
+          test -d "$poppler_data/cMap"
+          test -d "$poppler_data/cidToUnicode"
+          test -d "$poppler_data/nameToUnicode"
+          test -d "$poppler_data/unicodeMap"
+          mkdir -p "$output/share"
+          cp -a "$poppler_data" "$output/share/"
+
           cat > "$output/README.txt" <<'EOF'
           RAG Validator + Extractor Pipeline Test (Windows x64)
 
@@ -82,7 +94,9 @@ jobs:
           The program validates the PDF first. If validation passes, it runs
           hierarchical extraction and prints the document tree.
 
-          Keep the DLL files beside the EXE. Do not move the EXE by itself.
+          Keep the DLL files and the share\poppler data directory in their
+          original locations beside the EXE. Do not move the EXE by itself.
+
           Exit code 0 = both stages passed.
           Exit code 1 = validation or extraction failed.
           Exit code 2 = invalid command line or input file read failure.
@@ -90,6 +104,10 @@ jobs:
 
           test -s "$output/rag_pipeline_test.exe"
           test -s "$output/README.txt"
+          test -d "$output/share/poppler/cMap"
+          test -d "$output/share/poppler/cidToUnicode"
+          test -d "$output/share/poppler/nameToUnicode"
+          test -d "$output/share/poppler/unicodeMap"
 
       - name: Upload runnable Windows package
         uses: actions/upload-artifact@v4
