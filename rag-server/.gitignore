@@ -1,0 +1,9 @@
+# CMake and Ninja build trees
+/build/
+/cmake-build-*/
+
+# vcpkg manifest installation
+/vcpkg_installed/
+
+# Generated local packages and CI output
+**/output/
