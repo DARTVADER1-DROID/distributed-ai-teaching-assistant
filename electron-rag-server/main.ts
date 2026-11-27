@@ -1,4 +1,5 @@
 import express, { type NextFunction, type Request, type Response } from "express";
+import { performance } from "node:perf_hooks";
 import multer from "multer";
 import swaggerUi from "swagger-ui-express";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
@@ -36,7 +37,7 @@ const openApiDocument = {
       post: {
         summary: "Upload and inspect a PDF",
         description:
-          "Parses the uploaded PDF with PDF.js and returns page count and extracted page text. This is a parser smoke-test endpoint; it does not yet run Validator, Extractor hierarchy construction, or Chunker.",
+          "Parses the uploaded PDF with PDF.js and returns page count, extracted page text, and stage-level performance measurements. Validator, hierarchy extraction, and chunking are reported as not connected until their input adapters and tokenizer are configured.",
         requestBody: {
           required: true,
           content: {
@@ -84,6 +85,7 @@ app.post(
       return;
     }
 
+    const requestStartedAt = performance.now();
     const fileBytes = new Uint8Array(
       request.file.buffer.buffer,
       request.file.buffer.byteOffset,
@@ -91,13 +93,18 @@ app.post(
     );
 
     let destroyPdf: (() => Promise<void>) | undefined;
+    let pdfLoadingMs = 0;
+    let pageTextExtractionMs = 0;
 
     try {
+      const pdfLoadingStartedAt = performance.now();
       const loadingTask = getDocument({ data: fileBytes });
       const pdfDocument = await loadingTask.promise;
+      pdfLoadingMs = performance.now() - pdfLoadingStartedAt;
       destroyPdf = () => loadingTask.destroy();
 
       const pages: Array<{ page_number: number; text: string }> = [];
+      const pageTextExtractionStartedAt = performance.now();
 
       for (let pageNumber = 1; pageNumber <= pdfDocument.numPages; pageNumber += 1) {
         const page = await pdfDocument.getPage(pageNumber);
@@ -110,12 +117,61 @@ app.post(
         pages.push({ page_number: pageNumber, text });
         page.cleanup();
       }
+      pageTextExtractionMs = performance.now() - pageTextExtractionStartedAt;
+
+      const totalDurationMs = performance.now() - requestStartedAt;
+      const totalDurationSeconds = totalDurationMs / 1000;
+      const pipelineStages = [
+        {
+          stage: "pdf_loading",
+          status: "completed",
+          duration_ms: Number(pdfLoadingMs.toFixed(3)),
+        },
+        {
+          stage: "page_text_extraction",
+          status: "completed",
+          duration_ms: Number(pageTextExtractionMs.toFixed(3)),
+          pages_processed: pages.length,
+        },
+        {
+          stage: "validation",
+          status: "not_connected",
+          duration_ms: null,
+          reason: "The PDF.js-to-ExtractedPdfData adapter is not implemented yet.",
+        },
+        {
+          stage: "hierarchy_extraction",
+          status: "not_connected",
+          duration_ms: null,
+          reason: "The PDF.js parser adapter is not wired into ExtractorService yet.",
+        },
+        {
+          stage: "chunking",
+          status: "not_connected",
+          duration_ms: null,
+          reason: "ChunkerService requires an explicitly selected embedding-model tokenizer.",
+        },
+      ];
 
       response.status(200).json({
         file_name: request.file.originalname,
         file_size_bytes: request.file.size,
         page_count: pdfDocument.numPages,
         pages,
+        performance: {
+          total_duration_ms: Number(totalDurationMs.toFixed(3)),
+          stages: pipelineStages,
+          throughput: {
+            pages_per_second:
+              totalDurationSeconds > 0
+                ? Number((pdfDocument.numPages / totalDurationSeconds).toFixed(2))
+                : null,
+            input_megabytes_per_second:
+              totalDurationSeconds > 0
+                ? Number((request.file.size / 1024 / 1024 / totalDurationSeconds).toFixed(2))
+                : null,
+          },
+        },
       });
     } catch (error) {
       response.status(400).json({
