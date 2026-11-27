@@ -27,8 +27,8 @@ The vcpkg baseline is pinned in `vcpkg.json`. Do not install Poppler manually or
 | Platform | Required tools |
 |---|---|
 | Windows 10/11 x64 | Git, CMake 3.25+, Ninja, LLVM/Clang, Visual Studio C++ Build Tools and Windows SDK |
-| Linux x64 | Git, CMake 3.25+, Ninja, Clang, pkg-config and the platform's standard build utilities |
-| macOS x64 or ARM64 | Xcode Command Line Tools, Git, CMake 3.25+, Ninja and pkg-config |
+| Linux x64 | Git, CMake 3.25+, Ninja, Clang, pkg-config, autoconf, autoconf-archive, automake and libtool |
+| macOS x64 or ARM64 | Xcode Command Line Tools, Git, CMake 3.25+, Ninja, pkg-config, autoconf, autoconf-archive, automake and libtool |
 
 vcpkg is bootstrapped locally; the repository pins the exact vcpkg revision through its manifest baseline.
 
@@ -56,7 +56,7 @@ git -C "$VCPKG_ROOT" checkout e6d62cc9ce8f8d9687df14521118f2ec3c10ee6a
 
 ### macOS
 
-Install the Xcode Command Line Tools first, then:
+Install the Xcode Command Line Tools first, then install the vcpkg host build tools with `brew install ninja pkg-config autoconf autoconf-archive automake libtool`:
 
 ```bash
 export VCPKG_ROOT="$PWD/.vcpkg"
