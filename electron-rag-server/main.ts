@@ -2,7 +2,9 @@ import express, { type NextFunction, type Request, type Response } from "express
 import { performance } from "node:perf_hooks";
 import multer from "multer";
 import swaggerUi from "swagger-ui-express";
-import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
+import { RagConfig } from "./config/config.js";
+import { PdfJsDocumentParser } from "./pdf/pdfjs-document-parser.js";
+import { ValidatorService } from "./validator/validator-service.js";
 
 const app = express();
 const port = Number(process.env.PORT ?? 3000);
@@ -11,6 +13,10 @@ const upload = multer({
   limits: { fileSize: 25 * 1024 * 1024, files: 1 },
 });
 
+const ragConfig = new RagConfig();
+const pdfParser = new PdfJsDocumentParser(ragConfig);
+const validator = new ValidatorService(ragConfig);
+
 app.use(express.json());
 
 const openApiDocument = {
@@ -18,7 +24,8 @@ const openApiDocument = {
   info: {
     title: "Electron RAG Server API",
     version: "1.0.0",
-    description: "Local development API for uploading and inspecting PDF documents.",
+    description:
+      "Upload a PDF, extract text and font geometry with PDF.js, and run the configured RAG document validators.",
   },
   servers: [{ url: "/" }],
   paths: {
@@ -35,9 +42,9 @@ const openApiDocument = {
     },
     "/api/pdf/inspect": {
       post: {
-        summary: "Upload and inspect a PDF",
+        summary: "Parse and validate a PDF",
         description:
-          "Parses the uploaded PDF with PDF.js and returns page count, extracted page text, and stage-level performance measurements. Validator, hierarchy extraction, and chunking are reported as not connected until their input adapters and tokenizer are configured.",
+          "Parses PDF text and font geometry with PDF.js, converts it to ExtractedPdfData, and runs ValidatorService. Hierarchy extraction and chunking remain separate pipeline stages.",
         requestBody: {
           required: true,
           content: {
@@ -54,12 +61,12 @@ const openApiDocument = {
         },
         responses: {
           "200": {
-            description: "PDF parsed successfully",
+            description: "PDF parsed and validation completed",
             content: { "application/json": { schema: { type: "object" } } },
           },
           "400": { description: "Missing or invalid PDF" },
           "413": { description: "PDF exceeds the upload limit" },
-          "500": { description: "PDF parsing failed" },
+          "500": { description: "PDF processing failed" },
         },
       },
     },
@@ -92,32 +99,14 @@ app.post(
       request.file.buffer.byteLength,
     );
 
-    let destroyPdf: (() => Promise<void>) | undefined;
-    let pdfLoadingMs = 0;
-    let pageTextExtractionMs = 0;
-
     try {
-      const pdfLoadingStartedAt = performance.now();
-      const loadingTask = getDocument({ data: fileBytes });
-      const pdfDocument = await loadingTask.promise;
-      pdfLoadingMs = performance.now() - pdfLoadingStartedAt;
-      destroyPdf = () => loadingTask.destroy();
+      const parsed = await pdfParser.parseWithMetrics(fileBytes);
+      const extractedPdfData = pdfParser.toExtractedPdfData(parsed.document);
+      const pages = pdfParser.getPageText(parsed.document);
 
-      const pages: Array<{ page_number: number; text: string }> = [];
-      const pageTextExtractionStartedAt = performance.now();
-
-      for (let pageNumber = 1; pageNumber <= pdfDocument.numPages; pageNumber += 1) {
-        const page = await pdfDocument.getPage(pageNumber);
-        const textContent = await page.getTextContent();
-        const text = textContent.items
-          .map((item) => ("str" in item ? item.str : ""))
-          .filter(Boolean)
-          .join(" ");
-
-        pages.push({ page_number: pageNumber, text });
-        page.cleanup();
-      }
-      pageTextExtractionMs = performance.now() - pageTextExtractionStartedAt;
+      const validationStartedAt = performance.now();
+      const validationReport = validator.validate(extractedPdfData);
+      const validationDurationMs = performance.now() - validationStartedAt;
 
       const totalDurationMs = performance.now() - requestStartedAt;
       const totalDurationSeconds = totalDurationMs / 1000;
@@ -125,46 +114,65 @@ app.post(
         {
           stage: "pdf_loading",
           status: "completed",
-          duration_ms: Number(pdfLoadingMs.toFixed(3)),
+          duration_ms: Number(parsed.pdf_loading_ms.toFixed(3)),
         },
         {
           stage: "page_text_extraction",
           status: "completed",
-          duration_ms: Number(pageTextExtractionMs.toFixed(3)),
+          duration_ms: Number(parsed.page_text_extraction_ms.toFixed(3)),
           pages_processed: pages.length,
+          text_boxes_processed: parsed.document.pages.reduce(
+            (total, page) => total + page.text_boxes.length,
+            0,
+          ),
         },
         {
           stage: "validation",
-          status: "not_connected",
-          duration_ms: null,
-          reason: "The PDF.js-to-ExtractedPdfData adapter is not implemented yet.",
+          status: "completed",
+          duration_ms: Number(validationDurationMs.toFixed(3)),
+          is_valid: validationReport.isValid(),
+          issue_count: validationReport.issues.length,
         },
         {
           stage: "hierarchy_extraction",
           status: "not_connected",
           duration_ms: null,
-          reason: "The PDF.js parser adapter is not wired into ExtractorService yet.",
+          reason: "The parsed PDF is not yet passed through ExtractorService.",
         },
         {
           stage: "chunking",
           status: "not_connected",
           duration_ms: null,
-          reason: "ChunkerService requires an explicitly selected embedding-model tokenizer.",
+          reason: "ChunkerService still requires the exact tokenizer selected for the embedding model.",
         },
       ];
 
       response.status(200).json({
         file_name: request.file.originalname,
         file_size_bytes: request.file.size,
-        page_count: pdfDocument.numPages,
+        page_count: parsed.document.pages.length,
         pages,
+        validation: {
+          is_valid: validationReport.isValid(),
+          configuration_valid: validationReport.configuration_valid,
+          issue_count: validationReport.issues.length,
+          issues: validationReport.issues,
+          extracted_data: {
+            line_count: extractedPdfData.lines.length,
+            ordered_font_sizes: extractedPdfData.ordered_font_sizes,
+            font_size_frequency: Object.fromEntries(
+              extractedPdfData.font_size_frequency,
+            ),
+            body_font_size: extractedPdfData.body_font_size,
+          },
+        },
         performance: {
           total_duration_ms: Number(totalDurationMs.toFixed(3)),
           stages: pipelineStages,
           throughput: {
             pages_per_second:
               totalDurationSeconds > 0
-                ? Number((pdfDocument.numPages / totalDurationSeconds).toFixed(2))
+                ? Number((parsed.document.pages.length / totalDurationSeconds).toFixed(2))
                 : null,
             input_megabytes_per_second:
               totalDurationSeconds > 0
@@ -175,13 +183,9 @@ app.post(
       });
     } catch (error) {
       response.status(400).json({
-        error: "Unable to parse the uploaded file as a valid PDF.",
-        details: error instanceof Error ? error.message : "Unknown PDF parsing error.",
+        error: "Unable to parse or validate the uploaded PDF.",
+        details: error instanceof Error ? error.message : "Unknown PDF processing error.",
       });
-    } finally {
-      if (destroyPdf) {
-        await destroyPdf();
-      }
     }
   },
 );
