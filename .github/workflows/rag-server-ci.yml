@@ -20,7 +20,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  VCPKG_ROOT: ${{ github.workspace }}/.vcpkg
+  RAG_VCPKG_ROOT: ${{ github.workspace }}/.vcpkg
   VCPKG_DISABLE_METRICS: 1
   VCPKG_COMMIT: e6d62cc9ce8f8d9687df14521118f2ec3c10ee6a
 
@@ -79,20 +79,20 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          git clone https://github.com/microsoft/vcpkg.git "$env:VCPKG_ROOT"
+          git clone https://github.com/microsoft/vcpkg.git "$env:RAG_VCPKG_ROOT"
           if ($LASTEXITCODE -ne 0) { throw "Could not clone vcpkg." }
-          git -C "$env:VCPKG_ROOT" checkout "$env:VCPKG_COMMIT"
+          git -C "$env:RAG_VCPKG_ROOT" checkout "$env:VCPKG_COMMIT"
           if ($LASTEXITCODE -ne 0) { throw "Could not check out the pinned vcpkg baseline." }
-          & "$env:VCPKG_ROOT/bootstrap-vcpkg.bat" -disableMetrics
+          & "$env:RAG_VCPKG_ROOT/bootstrap-vcpkg.bat" -disableMetrics
           if ($LASTEXITCODE -ne 0) { throw "vcpkg bootstrap failed." }
 
       - name: Bootstrap pinned vcpkg on Linux and macOS
         if: runner.os != 'Windows'
         shell: bash
         run: |
-          git clone https://github.com/microsoft/vcpkg.git "$VCPKG_ROOT"
-          git -C "$VCPKG_ROOT" checkout "$VCPKG_COMMIT"
-          "$VCPKG_ROOT/bootstrap-vcpkg.sh" -disableMetrics
+          git clone https://github.com/microsoft/vcpkg.git "$RAG_VCPKG_ROOT"
+          git -C "$RAG_VCPKG_ROOT" checkout "$VCPKG_COMMIT"
+          "$RAG_VCPKG_ROOT/bootstrap-vcpkg.sh" -disableMetrics
 
       - name: Configure
         working-directory: rag-server
