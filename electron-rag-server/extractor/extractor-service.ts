@@ -99,6 +99,41 @@ function createDocumentNode(): DocumentNode {
   };
 }
 
+/**
+ * Finalizes page-span metadata after the complete hierarchy is known.
+ * A heading's scope can extend beyond its own heading line, so descendant
+ * ranges must be included when calculating its end page and page count.
+ */
+function populatePageSpan(node: DocumentNode): {
+  end_page_number: number;
+  end_line_number: number;
+} {
+  let endPage = node.end_page_number || node.page_number;
+  let endLine = node.end_line_number || node.line_number;
+
+  for (const child of node.children) {
+    const childSpan = populatePageSpan(child);
+    if (childSpan.end_page_number > endPage) {
+      endPage = childSpan.end_page_number;
+      endLine = childSpan.end_line_number;
+    }
+  }
+
+  if (node.type !== DocumentNodeType.Document) {
+    node.end_page_number = endPage;
+    node.end_line_number = endLine;
+    node.page_count =
+      node.page_number > 0 && endPage >= node.page_number
+        ? endPage - node.page_number + 1
+        : 0;
+  }
+
+  return {
+    end_page_number: endPage,
+    end_line_number: endLine,
+  };
+}
+
 function trim(value: string): string {
   return value.replace(/^[ \\t\\r\\n]+|[ \\t\\r\\n]+$/g, "");
 }
@@ -518,6 +553,7 @@ export class ExtractorService {
       paragraph.previous_height = line.height;
     }
 
+    populatePageSpan(result.document);
     result.is_successful = true;
     return result;
   }
