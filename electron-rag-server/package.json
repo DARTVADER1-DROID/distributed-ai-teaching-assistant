@@ -1,0 +1,9 @@
+{
+  "name": "electron-rag-server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Electron-based RAG server",
+  "dependencies": {
+    "pdfjs-dist": "6.5.438"
+  }
+}
