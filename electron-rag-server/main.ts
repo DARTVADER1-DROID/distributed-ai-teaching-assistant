@@ -20,7 +20,7 @@ const openApiDocument = {
     version: "1.0.0",
     description: "Local development API for uploading and inspecting PDF documents.",
   },
-  servers: [{ url: "http://localhost:3000" }],
+  servers: [{ url: "/" }],
   paths: {
     "/health": {
       get: {
