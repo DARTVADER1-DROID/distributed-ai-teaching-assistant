@@ -233,6 +233,25 @@ export class ExtractorService {
       return result;
     }
 
+    return this.extractParsedDocument(pdf);
+  }
+
+  /**
+   * Builds the document hierarchy from an already parsed PDF.
+   * This lets the pipeline reuse PDF.js output without parsing the same bytes twice.
+   */
+  public extractParsedDocument(pdf: ParsedPdfDocument): ExtractionResult {
+    const result: ExtractionResult = {
+      is_successful: false,
+      error: "",
+      document: createDocumentNode(),
+    };
+
+    if (!validConfig(this.config)) {
+      result.error = "Document format configuration is invalid.";
+      return result;
+    }
+
     if (pdf.is_locked) {
       result.error = "PDF is encrypted or password-protected.";
       return result;
