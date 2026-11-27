@@ -5,6 +5,8 @@
  * intentionally kept aligned with the C++ implementation.
  */
 
+import { ValidatorConfig } from "./config/validator-config";
+
 export interface ExtractedPdfLine {
   page_number: number;
   line_number: number;
@@ -19,16 +21,6 @@ export interface ExtractedPdfData {
   ordered_font_sizes: number[];
   font_size_frequency: Map<number, number> | Record<number, number>;
   body_font_size: number;
-}
-
-export interface ValidatorConfig {
-  heading_font_sizes: Map<number, number> | Record<number, number>;
-  heading_font_size_tolerance_points: number;
-  body_font_size_tolerance_points: number;
-  paragraph_font_size_tolerance_points: number;
-  font_size_precision_decimal_places: number;
-  minimum_pages: number;
-  maximum_pages: number;
 }
 
 export interface ValidationIssue {
@@ -62,23 +54,6 @@ export class ValidationReport {
     this.configuration_valid = this.configuration_valid && other.configuration_valid;
   }
 }
-
-const DEFAULT_CONFIG: ValidatorConfig = {
-  heading_font_sizes: new Map([
-    [1, 24.0],
-    [2, 20.0],
-    [3, 18.0],
-    [4, 16.0],
-    [5, 14.0],
-    [6, 12.0],
-  ]),
-  heading_font_size_tolerance_points: 0.5,
-  body_font_size_tolerance_points: 0.5,
-  paragraph_font_size_tolerance_points: 0.5,
-  font_size_precision_decimal_places: 2,
-  minimum_pages: 1,
-  maximum_pages: 0,
-};
 
 // C++ ostream's default floating-point precision is six significant digits.
 function formatFontSize(fontSize: number): string {
@@ -124,28 +99,16 @@ function isHeadingCandidateLine(
 function headingEntries(
   headingFontSizes: ValidatorConfig["heading_font_sizes"],
 ): Array<[number, number]> {
-  const entries =
-    headingFontSizes instanceof Map
-      ? Array.from(headingFontSizes.entries())
-      : Object.entries(headingFontSizes).map(([level, size]) => [
-          Number(level),
-          size,
-        ] as [number, number]);
-
-  // std::map iterates keys in ascending order.
-  return entries.sort((left, right) => left[0] - right[0]);
+  return Array.from(headingFontSizes.entries()).sort(
+    (left, right) => left[0] - right[0],
+  );
 }
 
 export class FontSizeValidator {
   private readonly config: ValidatorConfig;
 
   public constructor(config: Partial<ValidatorConfig> = {}) {
-    this.config = {
-      ...DEFAULT_CONFIG,
-      ...config,
-      heading_font_sizes:
-        config.heading_font_sizes ?? new Map(DEFAULT_CONFIG.heading_font_sizes),
-    };
+    this.config = new ValidatorConfig(config);
   }
 
   private validateConfiguration(): ValidationReport {
