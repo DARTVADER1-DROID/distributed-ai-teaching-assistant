@@ -15,7 +15,7 @@ The repository uses one build system and one dependency manager across platforms
 - C++17 (kept at the existing project language level)
 - CMake 3.25 or newer
 - Ninja
-- Clang/LLVM on Windows and Linux; Apple Clang on macOS
+- Clang/LLVM 18 on Windows and Linux; Apple Clang on macOS
 - vcpkg manifest mode for third-party dependencies
 
 Windows uses `clang-cl` with the Visual Studio C++ Build Tools, linker, and Windows SDK. This preserves compatibility with the Windows C/C++ runtime while using Clang as the compiler. Linux uses upstream Clang. macOS uses Apple Clang.
@@ -26,8 +26,8 @@ The vcpkg baseline is pinned in `vcpkg.json`. Do not install Poppler manually or
 
 | Platform | Required tools |
 |---|---|
-| Windows 10/11 x64 | Git, CMake 3.25+, Ninja, LLVM/Clang, Visual Studio C++ Build Tools and Windows SDK |
-| Linux x64 | Git, CMake 3.25+, Ninja, Clang, pkg-config, autoconf, autoconf-archive, automake and libtool |
+| Windows 10/11 x64 | Git, CMake 3.25+, Ninja, LLVM/Clang 18, Visual Studio C++ Build Tools and Windows SDK |
+| Linux x64 | Git, CMake 3.25+, Ninja, Clang 18, pkg-config, autoconf, autoconf-archive, automake and libtool |
 | macOS x64 or ARM64 | Xcode Command Line Tools, Git, CMake 3.25+, Ninja, pkg-config, autoconf, autoconf-archive, automake and libtool |
 
 vcpkg is bootstrapped locally; the repository pins the exact vcpkg revision through its manifest baseline.
