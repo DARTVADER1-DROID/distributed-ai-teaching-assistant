@@ -69,11 +69,11 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install --yes clang ninja-build pkg-config
+          sudo apt-get install --yes clang ninja-build pkg-config autoconf autoconf-archive automake libtool
 
       - name: Install macOS build tools
         if: runner.os == 'macOS'
-        run: brew install ninja pkg-config
+        run: brew install ninja pkg-config autoconf autoconf-archive automake libtool
 
       - name: Bootstrap pinned vcpkg on Windows
         if: runner.os == 'Windows'
