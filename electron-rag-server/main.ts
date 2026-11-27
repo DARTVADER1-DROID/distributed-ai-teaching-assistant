@@ -314,7 +314,7 @@ app.post(
                 : null,
             input_megabytes_per_second:
               totalDurationSeconds > 0
-                ? Number((request.file.size / 1024 / 1024 / totalDurationSeconds).toFixed(2))
+                ? Number((request.file.size / 1_000_000 / totalDurationSeconds).toFixed(4))
                 : null,
           },
         },
