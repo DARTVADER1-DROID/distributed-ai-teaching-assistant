@@ -36,9 +36,9 @@ jobs:
           - name: Ubuntu x64 / Clang / Ninja
             os: ubuntu-latest
             preset: linux-clang
-          - name: macOS x64 / Apple Clang / Ninja
-            os: macos-14
-            preset: macos-clang
+          - name: macOS ARM64 / Apple Clang / Ninja
+            os: macos-15
+            preset: macos-arm64-clang
 
     runs-on: ${{ matrix.os }}
 
