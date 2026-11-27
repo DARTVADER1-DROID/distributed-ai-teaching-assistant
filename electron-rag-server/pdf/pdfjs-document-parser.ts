@@ -7,6 +7,7 @@
  * points; font sizes are recovered from each text item's transform matrix.
  */
 
+import { performance } from "node:perf_hooks";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { RagConfig } from "../config/config.js";
 import type {
@@ -98,8 +99,8 @@ function textBoxFromItem(
 function appendText(current: string, fragment: string): string {
   if (
     current.length > 0 &&
-    !/[\\s]$/.test(current) &&
-    !/^[\\s]/.test(fragment)
+    !/[\s]$/.test(current) &&
+    !/^[\s]/.test(fragment)
   ) {
     return current + " " + fragment;
   }
@@ -115,6 +116,7 @@ interface MutableLine {
   center: number;
   height: number;
   fragment_count: number;
+  force_next_line: boolean;
 }
 
 function belongsToLine(box: PdfTextBox, line: MutableLine): boolean {
@@ -131,13 +133,25 @@ export class PdfJsDocumentParser implements PdfDocumentParser {
   }
 
   public async parse(pdfData: Uint8Array): Promise<ParsedPdfDocument> {
+    const result = await this.parseWithMetrics(pdfData);
+    return result.document;
+  }
+
+  public async parseWithMetrics(pdfData: Uint8Array): Promise<{
+    document: ParsedPdfDocument;
+    pdf_loading_ms: number;
+    page_text_extraction_ms: number;
+  }> {
     if (pdfData.byteLength === 0) {
       throw new Error("PDF data is empty.");
     }
 
+    const loadingStartedAt = performance.now();
     const loadingTask = getDocument({ data: pdfData });
     try {
       const pdf = await loadingTask.promise;
+      const pdfLoadingMs = performance.now() - loadingStartedAt;
+      const extractionStartedAt = performance.now();
       const pages: ParsedPdfPage[] = [];
 
       for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
@@ -161,7 +175,11 @@ export class PdfJsDocumentParser implements PdfDocumentParser {
         }
       }
 
-      return { is_locked: false, pages };
+      return {
+        document: { is_locked: false, pages },
+        pdf_loading_ms: pdfLoadingMs,
+        page_text_extraction_ms: performance.now() - extractionStartedAt,
+      };
     } finally {
       await loadingTask.destroy();
     }
@@ -196,7 +214,7 @@ export class PdfJsDocumentParser implements PdfDocumentParser {
 
         const startsNewLine =
           !currentLine ||
-          (currentLine as MutableLine & { force_next_line?: boolean }).force_next_line === true ||
+          currentLine.force_next_line ||
           !belongsToLine(box, currentLine);
 
         if (startsNewLine) {
@@ -210,6 +228,7 @@ export class PdfJsDocumentParser implements PdfDocumentParser {
             center: box.top + box.height / 2,
             height: Math.max(1, box.height),
             fragment_count: 0,
+            force_next_line: false,
           };
           lines.push(currentLine);
         } else {
@@ -237,8 +256,7 @@ export class PdfJsDocumentParser implements PdfDocumentParser {
           );
         }
 
-        (currentLine as MutableLine & { force_next_line?: boolean }).force_next_line =
-          (box as PdfTextBox & { ends_line?: boolean }).ends_line === true;
+        currentLine.force_next_line = box.ends_line === true;
       }
     }
 
@@ -248,7 +266,7 @@ export class PdfJsDocumentParser implements PdfDocumentParser {
         page_number: line.page_number,
         line_number: line.line_number,
         text,
-        word_count: text.length === 0 ? 0 : text.split(/\\s+/).length,
+        word_count: text.length === 0 ? 0 : text.split(/\s+/).length,
         font_sizes: line.font_sizes,
       };
     });
