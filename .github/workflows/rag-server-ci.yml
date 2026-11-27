@@ -32,10 +32,10 @@ jobs:
       matrix:
         include:
           - name: Windows x64 / Clang-CL / Ninja
-            os: windows-latest
+            os: windows-2025
             preset: windows-clang
-          - name: Ubuntu x64 / Clang / Ninja
-            os: ubuntu-latest
+          - name: Ubuntu 24.04 x64 / Clang 18 / Ninja
+            os: ubuntu-24.04
             preset: linux-clang
           - name: macOS ARM64 / Apple Clang / Ninja
             os: macos-15
@@ -69,7 +69,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install --yes clang ninja-build pkg-config autoconf autoconf-archive automake libtool
+          sudo apt-get install --yes clang-18 ninja-build pkg-config autoconf autoconf-archive automake libtool
 
       - name: Install macOS build tools
         if: runner.os == 'macOS'
