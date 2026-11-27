@@ -39,19 +39,19 @@ Run the dependency-manager setup from the repository root. After bootstrapping v
 ### Windows PowerShell
 
 ```powershell
-$env:VCPKG_ROOT = "$PWD\.vcpkg"
-git clone https://github.com/microsoft/vcpkg.git $env:VCPKG_ROOT
-git -C $env:VCPKG_ROOT checkout e6d62cc9ce8f8d9687df14521118f2ec3c10ee6a
-& "$env:VCPKG_ROOT\bootstrap-vcpkg.bat" -disableMetrics
+$env:RAG_VCPKG_ROOT = "$PWD\.vcpkg"
+git clone https://github.com/microsoft/vcpkg.git $env:RAG_VCPKG_ROOT
+git -C $env:RAG_VCPKG_ROOT checkout e6d62cc9ce8f8d9687df14521118f2ec3c10ee6a
+& "$env:RAG_VCPKG_ROOT\bootstrap-vcpkg.bat" -disableMetrics
 ```
 
 ### Linux
 
 ```bash
 export VCPKG_ROOT="$PWD/.vcpkg"
-git clone https://github.com/microsoft/vcpkg.git "$VCPKG_ROOT"
-git -C "$VCPKG_ROOT" checkout e6d62cc9ce8f8d9687df14521118f2ec3c10ee6a
-"$VCPKG_ROOT/bootstrap-vcpkg.sh" -disableMetrics
+git clone https://github.com/microsoft/vcpkg.git "$RAG_VCPKG_ROOT"
+git -C "$RAG_VCPKG_ROOT" checkout e6d62cc9ce8f8d9687df14521118f2ec3c10ee6a
+"$RAG_VCPKG_ROOT/bootstrap-vcpkg.sh" -disableMetrics
 ```
 
 ### macOS
@@ -60,9 +60,9 @@ Install the Xcode Command Line Tools first, then install the vcpkg host build to
 
 ```bash
 export VCPKG_ROOT="$PWD/.vcpkg"
-git clone https://github.com/microsoft/vcpkg.git "$VCPKG_ROOT"
-git -C "$VCPKG_ROOT" checkout e6d62cc9ce8f8d9687df14521118f2ec3c10ee6a
-"$VCPKG_ROOT/bootstrap-vcpkg.sh" -disableMetrics
+git clone https://github.com/microsoft/vcpkg.git "$RAG_VCPKG_ROOT"
+git -C "$RAG_VCPKG_ROOT" checkout e6d62cc9ce8f8d9687df14521118f2ec3c10ee6a
+"$RAG_VCPKG_ROOT/bootstrap-vcpkg.sh" -disableMetrics
 ```
 
 Keep `VCPKG_ROOT` set in each terminal session used to configure the project.
