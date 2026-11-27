@@ -7,6 +7,7 @@ import { PdfJsDocumentParser } from "./pdf/pdfjs-document-parser.js";
 import { ExtractorService } from "./extractor/extractor-service.js";
 import { ValidatorService } from "./validator/validator-service.js";
 import { ChunkerService } from "./chunker/chunker-service.js";
+import { BgeM3Tokenizer } from "./embedding/bge-m3-tokenizer.js";
 
 const app = express();
 const port = Number(process.env.PORT ?? 3000);
@@ -19,8 +20,21 @@ const ragConfig = new RagConfig();
 const pdfParser = new PdfJsDocumentParser(ragConfig);
 const validator = new ValidatorService(ragConfig);
 const extractor = new ExtractorService(pdfParser, ragConfig);
-// Token counting remains injectable until the embedding model is selected.
-const chunker = new ChunkerService(ragConfig);
+// Load the model-matched tokenizer on first use and reuse it across requests.
+// A failed load is cleared so a later request can retry.
+let bgeM3TokenizerPromise: ReturnType<typeof BgeM3Tokenizer.load> | null = null;
+function getBgeM3Tokenizer(): ReturnType<typeof BgeM3Tokenizer.load> {
+  if (bgeM3TokenizerPromise === null) {
+    const loading = BgeM3Tokenizer.load();
+    bgeM3TokenizerPromise = loading;
+    void loading.catch(() => {
+      if (bgeM3TokenizerPromise === loading) {
+        bgeM3TokenizerPromise = null;
+      }
+    });
+  }
+  return bgeM3TokenizerPromise;
+}
 
 app.use(express.json());
 
@@ -30,7 +44,7 @@ const openApiDocument = {
     title: "Electron RAG Server API",
     version: "1.0.0",
     description:
-      "Upload a PDF, extract text and font geometry with PDF.js, and run the configured RAG document validators.",
+      "Upload a PDF, validate its typography, extract its heading hierarchy, and create 512-token chunks using the pinned BGE-M3 tokenizer.",
   },
   servers: [{ url: "/" }],
   paths: {
@@ -49,7 +63,7 @@ const openApiDocument = {
       post: {
         summary: "Parse and validate a PDF",
         description:
-          "Parses PDF text and font geometry with PDF.js, validates it, extracts its document hierarchy, and passes successful extraction results to ChunkerService. Chunking enforces the configured token limit using an injected tokenizer; the stage reports a clear blocked state until the embedding model tokenizer is configured.",
+          "Parses PDF text and font geometry with PDF.js, validates it, extracts its document hierarchy, loads the pinned BGE-M3 tokenizer, and creates chunks whose complete embedding input (including heading context and special tokens) fits the configured 512-token limit.",
         requestBody: {
           required: true,
           content: {
@@ -131,16 +145,43 @@ app.post(
         hierarchySkipReason = "Hierarchy extraction was skipped because PDF validation failed.";
       }
 
+      let tokenizerLoadDurationMs: number | null = null;
+      let tokenizerStatus: "completed" | "failed" | "skipped" = "skipped";
+      let tokenizerError: string | null = null;
+
       let chunkingDurationMs: number | null = null;
       let chunkingResult: ReturnType<ChunkerService["chunkDocument"]> | null = null;
       let chunkingStatus: "completed" | "blocked" | "skipped" = "skipped";
       let chunkingSkipReason: string | null = null;
 
       if (hierarchyResult?.is_successful) {
-        const chunkingStartedAt = performance.now();
-        chunkingResult = chunker.chunkDocument(hierarchyResult);
-        chunkingDurationMs = performance.now() - chunkingStartedAt;
-        chunkingStatus = chunkingResult.is_successful ? "completed" : "blocked";
+        const tokenizerStartedAt = performance.now();
+        try {
+          const bgeM3Tokenizer = await getBgeM3Tokenizer();
+          tokenizerLoadDurationMs = performance.now() - tokenizerStartedAt;
+          tokenizerStatus = "completed";
+
+          const chunker = new ChunkerService(
+            ragConfig,
+            (text) => bgeM3Tokenizer.countTokens(text),
+          );
+          const chunkingStartedAt = performance.now();
+          chunkingResult = chunker.chunkDocument(hierarchyResult);
+          chunkingDurationMs = performance.now() - chunkingStartedAt;
+          chunkingStatus = chunkingResult.is_successful ? "completed" : "blocked";
+          if (chunkingResult.error) {
+            chunkingSkipReason = chunkingResult.error;
+          }
+        } catch (error) {
+          tokenizerLoadDurationMs = performance.now() - tokenizerStartedAt;
+          tokenizerStatus = "failed";
+          tokenizerError =
+            error instanceof Error
+              ? error.message
+              : "Unknown BGE-M3 tokenizer initialization error.";
+          chunkingStatus = "blocked";
+          chunkingSkipReason = `BGE-M3 tokenizer initialization failed: ${tokenizerError}`;
+        }
       } else {
         chunkingSkipReason =
           "Chunking was skipped because successful hierarchy extraction is required.";
@@ -188,12 +229,25 @@ app.post(
             : { reason: hierarchySkipReason }),
         },
         {
+          stage: "tokenizer_initialization",
+          status: tokenizerStatus,
+          duration_ms:
+            tokenizerLoadDurationMs === null
+              ? null
+              : Number(tokenizerLoadDurationMs.toFixed(3)),
+          model_id: BgeM3Tokenizer.modelId,
+          revision: BgeM3Tokenizer.revision,
+          model_max_sequence_length: BgeM3Tokenizer.modelMaxSequenceLength,
+          ...(tokenizerError ? { error: tokenizerError } : {}),
+        },
+        {
           stage: "chunking",
           status: chunkingStatus,
           duration_ms:
             chunkingDurationMs === null
               ? null
               : Number(chunkingDurationMs.toFixed(3)),
+          max_chunk_tokens: ragConfig.max_chunk_tokens,
           ...(chunkingResult
             ? {
                 is_successful: chunkingResult.is_successful,
@@ -218,13 +272,26 @@ app.post(
               document: hierarchyResult.document,
             }
           : null,
+        tokenizer: {
+          model_id: BgeM3Tokenizer.modelId,
+          revision: BgeM3Tokenizer.revision,
+          model_max_sequence_length: BgeM3Tokenizer.modelMaxSequenceLength,
+          max_chunk_tokens: ragConfig.max_chunk_tokens,
+          status: tokenizerStatus,
+          error: tokenizerError,
+        },
         chunking: chunkingResult
           ? {
               is_successful: chunkingResult.is_successful,
               error: chunkingResult.error,
+              chunk_count: chunkingResult.chunks.length,
               chunks: chunkingResult.chunks,
             }
-          : null,
+          : {
+              is_successful: false,
+              error: chunkingSkipReason,
+              chunks: [],
+            },
         validation: {
           is_valid: validationReport.isValid(),
           configuration_valid: validationReport.configuration_valid,
