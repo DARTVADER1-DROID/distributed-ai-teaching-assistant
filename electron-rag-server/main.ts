@@ -6,6 +6,7 @@ import { RagConfig } from "./config/config.js";
 import { PdfJsDocumentParser } from "./pdf/pdfjs-document-parser.js";
 import { ExtractorService } from "./extractor/extractor-service.js";
 import { ValidatorService } from "./validator/validator-service.js";
+import { ChunkerService } from "./chunker/chunker-service.js";
 
 const app = express();
 const port = Number(process.env.PORT ?? 3000);
@@ -18,6 +19,8 @@ const ragConfig = new RagConfig();
 const pdfParser = new PdfJsDocumentParser(ragConfig);
 const validator = new ValidatorService(ragConfig);
 const extractor = new ExtractorService(pdfParser, ragConfig);
+// Token counting remains injectable until the embedding model is selected.
+const chunker = new ChunkerService(ragConfig);
 
 app.use(express.json());
 
@@ -46,7 +49,7 @@ const openApiDocument = {
       post: {
         summary: "Parse and validate a PDF",
         description:
-          "Parses PDF text and font geometry with PDF.js, runs ValidatorService, and on successful validation builds a structured document hierarchy with ExtractorService. Chunking remains disconnected until the exact tokenizer is selected.",
+          "Parses PDF text and font geometry with PDF.js, validates it, extracts its document hierarchy, and passes successful extraction results to ChunkerService. Chunking enforces the configured token limit using an injected tokenizer; the stage reports a clear blocked state until the embedding model tokenizer is configured.",
         requestBody: {
           required: true,
           content: {
@@ -128,6 +131,21 @@ app.post(
         hierarchySkipReason = "Hierarchy extraction was skipped because PDF validation failed.";
       }
 
+      let chunkingDurationMs: number | null = null;
+      let chunkingResult: ReturnType<ChunkerService["chunkDocument"]> | null = null;
+      let chunkingStatus: "completed" | "blocked" | "skipped" = "skipped";
+      let chunkingSkipReason: string | null = null;
+
+      if (hierarchyResult?.is_successful) {
+        const chunkingStartedAt = performance.now();
+        chunkingResult = chunker.chunkDocument(hierarchyResult);
+        chunkingDurationMs = performance.now() - chunkingStartedAt;
+        chunkingStatus = chunkingResult.is_successful ? "completed" : "blocked";
+      } else {
+        chunkingSkipReason =
+          "Chunking was skipped because successful hierarchy extraction is required.";
+      }
+
       const totalDurationMs = performance.now() - requestStartedAt;
       const totalDurationSeconds = totalDurationMs / 1000;
       const pipelineStages = [
@@ -171,9 +189,20 @@ app.post(
         },
         {
           stage: "chunking",
-          status: "not_connected",
-          duration_ms: null,
-          reason: "ChunkerService still requires the exact tokenizer selected for the embedding model.",
+          status: chunkingStatus,
+          duration_ms:
+            chunkingDurationMs === null
+              ? null
+              : Number(chunkingDurationMs.toFixed(3)),
+          ...(chunkingResult
+            ? {
+                is_successful: chunkingResult.is_successful,
+                chunk_count: chunkingResult.chunks.length,
+                ...(chunkingResult.error
+                  ? { error: chunkingResult.error }
+                  : {}),
+              }
+            : { reason: chunkingSkipReason }),
         },
       ];
 
@@ -187,6 +216,13 @@ app.post(
               is_successful: hierarchyResult.is_successful,
               error: hierarchyResult.error,
               document: hierarchyResult.document,
+            }
+          : null,
+        chunking: chunkingResult
+          ? {
+              is_successful: chunkingResult.is_successful,
+              error: chunkingResult.error,
+              chunks: chunkingResult.chunks,
             }
           : null,
         validation: {
