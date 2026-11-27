@@ -6,7 +6,7 @@
  * the extraction logic remains independent of a particular PDF library.
  */
 
-import { RagConfig } from "../config/config";
+import { RagConfig } from "../config/config.js";
 
 export enum DocumentNodeType {
   Document = "Document",

@@ -2,8 +2,8 @@
  * TypeScript translation of rag-server/validator/page_limit_validator.cpp.
  */
 
-import { RagConfig } from "../config/config";
-import { ValidationReport } from "./font-size-validator";
+import { RagConfig } from "../config/config.js";
+import { ValidationReport } from "./font-size-validator.js";
 
 export class PageLimitValidator {
   private readonly config: RagConfig;

@@ -5,12 +5,12 @@
  * validation messages mirror the C++ implementation.
  */
 
-import { RagConfig } from "../config/config";
+import { RagConfig } from "../config/config.js";
 import {
   ExtractedPdfData,
   ExtractedPdfLine,
   ValidationReport,
-} from "./font-size-validator";
+} from "./font-size-validator.js";
 
 interface ActiveHeading {
   level: number;

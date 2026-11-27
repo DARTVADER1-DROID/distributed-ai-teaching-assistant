@@ -5,7 +5,7 @@
  * intentionally kept aligned with the C++ implementation.
  */
 
-import { RagConfig } from "../config/config";
+import { RagConfig } from "../config/config.js";
 
 export interface ExtractedPdfLine {
   page_number: number;

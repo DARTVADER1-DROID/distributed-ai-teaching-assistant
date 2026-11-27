@@ -1,4 +1,4 @@
-import express, { type Request, type Response } from "express";
+import express, { type NextFunction, type Request, type Response } from "express";
 import multer from "multer";
 import swaggerUi from "swagger-ui-express";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
@@ -90,11 +90,12 @@ app.post(
       request.file.buffer.byteLength,
     );
 
-    let pdfDocument: Awaited<ReturnType<ReturnType<typeof getDocument>["promise"]>> | undefined;
+    let destroyPdf: (() => Promise<void>) | undefined;
 
     try {
       const loadingTask = getDocument({ data: fileBytes });
-      pdfDocument = await loadingTask.promise;
+      const pdfDocument = await loadingTask.promise;
+      destroyPdf = () => loadingTask.destroy();
 
       const pages: Array<{ page_number: number; text: string }> = [];
 
@@ -122,14 +123,14 @@ app.post(
         details: error instanceof Error ? error.message : "Unknown PDF parsing error.",
       });
     } finally {
-      if (pdfDocument) {
-        await pdfDocument.destroy();
+      if (destroyPdf) {
+        await destroyPdf();
       }
     }
   },
 );
 
-app.use((error: unknown, _request: Request, response: Response, _next: express.NextFunction) => {
+app.use((error: unknown, _request: Request, response: Response, _next: NextFunction) => {
   if (error instanceof multer.MulterError && error.code === "LIMIT_FILE_SIZE") {
     response.status(413).json({ error: "PDF exceeds the 25 MB upload limit." });
     return;

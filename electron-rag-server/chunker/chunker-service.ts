@@ -5,12 +5,12 @@
  * The tokenizer is injected so token counts match the selected embedding model.
  */
 
-import { RagConfig } from "../config/config";
+import { RagConfig } from "../config/config.js";
 import {
   DocumentNode,
   DocumentNodeType,
   ExtractionResult,
-} from "../extractor/extractor-service";
+} from "../extractor/extractor-service.js";
 
 export type TokenCounter = (text: string) => number;
 
