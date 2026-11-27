@@ -39,6 +39,8 @@ export interface PdfTextBox {
   bottom: number;
   height: number;
   font_size?: number;
+  /** PDF.js line-ending hint; ignored by hierarchy extraction itself. */
+  ends_line?: boolean;
 }
 
 export interface ParsedPdfPage {
