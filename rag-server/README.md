@@ -34,7 +34,7 @@ vcpkg is bootstrapped locally; the repository pins the exact vcpkg revision thro
 
 ## One-time dependency-manager setup
 
-Run these commands from the repository root.
+Run the dependency-manager setup from the repository root. After bootstrapping vcpkg, change into `rag-server` before configuring and building.
 
 ### Windows PowerShell
 
@@ -69,7 +69,7 @@ Keep `VCPKG_ROOT` set in each terminal session used to configure the project.
 
 ## Configure and build
 
-Run from the repository root:
+Run the following commands from the `rag-server` directory:
 
 ### Windows (Clang-CL + Ninja)
 
