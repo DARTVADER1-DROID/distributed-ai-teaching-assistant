@@ -12,6 +12,16 @@
     "declaration": true,
     "sourceMap": true
   },
-  "include": ["main.ts", "config/**/*.ts", "validator/**/*.ts", "extractor/**/*.ts", "chunker/**/*.ts"],
-  "exclude": ["node_modules", "dist"]
+  "include": [
+    "main.ts",
+    "config/**/*.ts",
+    "validator/**/*.ts",
+    "extractor/**/*.ts",
+    "chunker/**/*.ts",
+    "embedding/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist"
+  ]
 }
