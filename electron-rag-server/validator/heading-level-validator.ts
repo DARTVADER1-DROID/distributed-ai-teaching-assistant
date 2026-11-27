@@ -5,7 +5,7 @@
  * validation messages mirror the C++ implementation.
  */
 
-import { ValidatorConfig } from "./config/validator-config";
+import { RagConfig } from "../config/config";
 import {
   ExtractedPdfData,
   ExtractedPdfLine,
@@ -43,7 +43,7 @@ function trim(value: string): string {
 function detectHeadingLevel(
   line: ExtractedPdfLine,
   extractedData: ExtractedPdfData,
-  config: ValidatorConfig,
+  config: RagConfig,
 ): number {
   let lineLevel = 0;
   let largestHeadingSize = 0.0;
@@ -82,10 +82,10 @@ function detectHeadingLevel(
 }
 
 export class HeadingLevelValidator {
-  private readonly config: ValidatorConfig;
+  private readonly config: RagConfig;
 
-  public constructor(config: Partial<ValidatorConfig> = {}) {
-    this.config = new ValidatorConfig(config);
+  public constructor(config: Partial<RagConfig> = {}) {
+    this.config = new RagConfig(config);
   }
 
   public validate(extractedData: ExtractedPdfData): ValidationReport {

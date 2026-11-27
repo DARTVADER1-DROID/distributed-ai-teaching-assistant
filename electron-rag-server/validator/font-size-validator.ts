@@ -5,7 +5,7 @@
  * intentionally kept aligned with the C++ implementation.
  */
 
-import { ValidatorConfig } from "./config/validator-config";
+import { RagConfig } from "../config/config";
 
 export interface ExtractedPdfLine {
   page_number: number;
@@ -97,7 +97,7 @@ function isHeadingCandidateLine(
 }
 
 function headingEntries(
-  headingFontSizes: ValidatorConfig["heading_font_sizes"],
+  headingFontSizes: RagConfig["heading_font_sizes"],
 ): Array<[number, number]> {
   return Array.from(headingFontSizes.entries()).sort(
     (left, right) => left[0] - right[0],
@@ -105,10 +105,10 @@ function headingEntries(
 }
 
 export class FontSizeValidator {
-  private readonly config: ValidatorConfig;
+  private readonly config: RagConfig;
 
-  public constructor(config: Partial<ValidatorConfig> = {}) {
-    this.config = new ValidatorConfig(config);
+  public constructor(config: Partial<RagConfig> = {}) {
+    this.config = new RagConfig(config);
   }
 
   private validateConfiguration(): ValidationReport {

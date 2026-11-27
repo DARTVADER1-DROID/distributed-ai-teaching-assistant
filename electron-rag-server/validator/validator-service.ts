@@ -8,7 +8,7 @@
  * service receives ExtractedPdfData from the future TypeScript PDF extractor.
  */
 
-import { ValidatorConfig } from "./config/validator-config";
+import { RagConfig } from "../config/config";
 import {
   ExtractedPdfData,
   FontSizeValidator,
@@ -22,8 +22,8 @@ export class ValidatorService {
   private readonly headingLevelValidator: HeadingLevelValidator;
   private readonly pageLimitValidator: PageLimitValidator;
 
-  public constructor(config: Partial<ValidatorConfig> = {}) {
-    const sharedConfig = new ValidatorConfig(config);
+  public constructor(config: Partial<RagConfig> = {}) {
+    const sharedConfig = new RagConfig(config);
 
     this.fontSizeValidator = new FontSizeValidator(sharedConfig);
     this.headingLevelValidator = new HeadingLevelValidator(sharedConfig);

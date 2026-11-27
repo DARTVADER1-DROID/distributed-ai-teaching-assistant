@@ -6,7 +6,7 @@
  * the extraction logic remains independent of a particular PDF library.
  */
 
-import { DocumentFormatConfig } from "../validator/config/document-format-config";
+import { RagConfig } from "../config/config";
 
 export enum DocumentNodeType {
   Document = "Document",
@@ -131,7 +131,7 @@ function belongsToLine(
 function headingLevelForLine(
   line: ExtractedLine,
   bodyFontSize: number,
-  config: DocumentFormatConfig,
+  config: RagConfig,
 ): number {
   let matchedLevel = 0;
   let largestHeadingSize = 0;
@@ -166,7 +166,7 @@ function headingLevelForLine(
   return matchedLevel;
 }
 
-function validConfig(config: DocumentFormatConfig): boolean {
+function validConfig(config: RagConfig): boolean {
   if (
     config.heading_font_sizes.size === 0 ||
     !Number.isFinite(config.heading_font_size_tolerance_points) ||
@@ -191,15 +191,15 @@ function validConfig(config: DocumentFormatConfig): boolean {
 }
 
 export class ExtractorService {
-  private readonly config: DocumentFormatConfig;
+  private readonly config: RagConfig;
   private readonly parser: PdfDocumentParser;
 
   public constructor(
     parser: PdfDocumentParser,
-    config: Partial<DocumentFormatConfig> = {},
+    config: Partial<RagConfig> = {},
   ) {
     this.parser = parser;
-    this.config = new DocumentFormatConfig(config);
+    this.config = new RagConfig(config);
   }
 
   /**

@@ -5,7 +5,7 @@
  * The tokenizer is injected so token counts match the selected embedding model.
  */
 
-import { ChunkerConfig } from "./config/chunker-config";
+import { RagConfig } from "../config/config";
 import {
   DocumentNode,
   DocumentNodeType,
@@ -354,10 +354,10 @@ export class ChunkerService {
   private readonly config: ChunkerConfig;
 
   public constructor(
-    config: Partial<ChunkerConfig>,
+    config: Partial<RagConfig>,
     private readonly tokenCounter?: TokenCounter,
   ) {
-    this.config = new ChunkerConfig(config);
+    this.config = new RagConfig(config);
   }
 
   /** Converts a successful extraction result into ordered embedding-ready chunks. */
