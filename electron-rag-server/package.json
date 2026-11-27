@@ -2,8 +2,25 @@
   "name": "electron-rag-server",
   "version": "1.0.0",
   "private": true,
+  "type": "module",
   "description": "Electron-based RAG server",
+  "scripts": {
+    "dev": "tsx watch main.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/main.js"
+  },
   "dependencies": {
-    "pdfjs-dist": "6.5.438"
+    "express": "^5.1.0",
+    "multer": "^2.0.2",
+    "pdfjs-dist": "6.5.438",
+    "swagger-ui-express": "^5.0.1"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.3",
+    "@types/multer": "^2.0.0",
+    "@types/node": "^24.0.0",
+    "@types/swagger-ui-express": "^4.1.8",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2"
   }
 }
