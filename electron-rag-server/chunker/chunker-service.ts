@@ -23,6 +23,8 @@ export interface DocumentChunk {
   embedding_text: string;
   /** Heading titles from the document root to the section containing this chunk. */
   heading_path: string[];
+  /** Exact BGE-M3 token count of embedding_text, including special tokens. */
+  token_count: number;
   start_page_number: number;
   start_line_number: number;
   end_page_number: number;
@@ -233,6 +235,16 @@ class ChunkBuilder {
       current.index = this.output.length;
       current.heading_path = [...headingPath];
       current.embedding_text = makeEmbeddingText(headingPath, current.text);
+      current.token_count = countTokens(
+        this.counter,
+        headingPath,
+        current.text,
+      );
+      if (current.token_count > this.maxTokens) {
+        throw new Error(
+          `Chunk ${current.index} exceeds the configured token limit (${current.token_count}/${this.maxTokens}).`,
+        );
+      }
       this.output.push(current);
       current = this.createEmptyChunk();
       hasContent = false;
@@ -308,6 +320,7 @@ class ChunkBuilder {
       text: "",
       embedding_text: "",
       heading_path: [],
+      token_count: 0,
       start_page_number: 0,
       start_line_number: 0,
       end_page_number: 0,
