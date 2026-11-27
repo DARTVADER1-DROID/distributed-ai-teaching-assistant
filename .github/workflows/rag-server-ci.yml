@@ -2,6 +2,7 @@ name: RAG Server - Cross-platform C++ CI
 
 on:
   push:
+    branches: [main]
     paths:
       - "rag-server/**"
       - ".github/workflows/rag-server-ci.yml"
