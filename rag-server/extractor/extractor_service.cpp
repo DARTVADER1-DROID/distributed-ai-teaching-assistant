@@ -1,7 +1,7 @@
 #include "extractor_service.hpp"
 
-#include <poppler/cpp/poppler-document.h>
-#include <poppler/cpp/poppler-page.h>
+#include <cpp/poppler-document.h>
+#include <cpp/poppler-page.h>
 
 #include <algorithm>
 #include <cmath>
