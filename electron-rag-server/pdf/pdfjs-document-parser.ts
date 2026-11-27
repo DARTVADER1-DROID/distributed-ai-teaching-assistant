@@ -231,7 +231,7 @@ export class PdfJsDocumentParser implements PdfDocumentParser {
             force_next_line: false,
           };
           lines.push(currentLine);
-        } else {
+        } else if (currentLine) {
           const weight = currentLine.fragment_count;
           currentLine.center =
             (currentLine.center * weight + box.top + box.height / 2) /
@@ -239,8 +239,13 @@ export class PdfJsDocumentParser implements PdfDocumentParser {
           currentLine.height = Math.max(currentLine.height, box.height);
         }
 
-        currentLine.text = appendText(currentLine.text, box.text);
-        currentLine.fragment_count += 1;
+        const line = currentLine;
+        if (!line) {
+          throw new Error("PDF text line grouping failed to initialize a line.");
+        }
+
+        line.text = appendText(line.text, box.text);
+        line.fragment_count += 1;
 
         if (
           box.font_size !== undefined &&
@@ -249,14 +254,14 @@ export class PdfJsDocumentParser implements PdfDocumentParser {
         ) {
           const normalized =
             Math.round(box.font_size * precisionScale) / precisionScale;
-          currentLine.font_sizes.push(normalized);
+          line.font_sizes.push(normalized);
           fontFrequency.set(
             normalized,
             (fontFrequency.get(normalized) ?? 0) + 1,
           );
         }
 
-        currentLine.force_next_line = box.ends_line === true;
+        line.force_next_line = box.ends_line === true;
       }
     }
 
