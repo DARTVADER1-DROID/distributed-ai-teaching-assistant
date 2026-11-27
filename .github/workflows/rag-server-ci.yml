@@ -1,0 +1,100 @@
+name: RAG Server - Cross-platform C++ CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "rag-server/**"
+      - ".github/workflows/rag-server-ci.yml"
+  pull_request:
+    paths:
+      - "rag-server/**"
+      - ".github/workflows/rag-server-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rag-server-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  VCPKG_ROOT: ${{ github.workspace }}/.vcpkg
+  VCPKG_DISABLE_METRICS: 1
+  VCPKG_COMMIT: e6d62cc9ce8f8d9687df14521118f2ec3c10ee6a
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows x64 / Clang-CL / Ninja
+            os: windows-latest
+            preset: windows-clang
+          - name: Ubuntu x64 / Clang / Ninja
+            os: ubuntu-latest
+            preset: linux-clang
+          - name: macOS ARM64 / Apple Clang / Ninja
+            os: macos-14
+            preset: macos-clang
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install Windows compiler and Ninja
+        if: runner.os == 'Windows'
+        uses: llvm-actions/setup-llvm@v1
+        with:
+          version: "18.1.8"
+
+      - name: Activate MSVC-compatible Windows environment
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Install Windows Ninja
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: choco install ninja --no-progress
+
+      - name: Install Linux build tools
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes clang ninja-build pkg-config
+
+      - name: Install macOS build tools
+        if: runner.os == 'macOS'
+        run: brew install ninja pkg-config
+
+      - name: Bootstrap pinned vcpkg on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          git clone https://github.com/microsoft/vcpkg.git "$env:VCPKG_ROOT"
+          if ($LASTEXITCODE -ne 0) { throw "Could not clone vcpkg." }
+          git -C "$env:VCPKG_ROOT" checkout "$env:VCPKG_COMMIT"
+          if ($LASTEXITCODE -ne 0) { throw "Could not check out the pinned vcpkg baseline." }
+          & "$env:VCPKG_ROOT/bootstrap-vcpkg.bat" -disableMetrics
+          if ($LASTEXITCODE -ne 0) { throw "vcpkg bootstrap failed." }
+
+      - name: Bootstrap pinned vcpkg on Linux and macOS
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          git clone https://github.com/microsoft/vcpkg.git "$VCPKG_ROOT"
+          git -C "$VCPKG_ROOT" checkout "$VCPKG_COMMIT"
+          "$VCPKG_ROOT/bootstrap-vcpkg.sh" -disableMetrics
+
+      - name: Configure
+        run: cmake --preset ${{ matrix.preset }}
+
+      - name: Build all RAG targets
+        run: cmake --build --preset ${{ matrix.preset }} --parallel 2
