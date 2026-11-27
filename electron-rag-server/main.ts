@@ -4,6 +4,7 @@ import multer from "multer";
 import swaggerUi from "swagger-ui-express";
 import { RagConfig } from "./config/config.js";
 import { PdfJsDocumentParser } from "./pdf/pdfjs-document-parser.js";
+import { ExtractorService } from "./extractor/extractor-service.js";
 import { ValidatorService } from "./validator/validator-service.js";
 
 const app = express();
@@ -16,6 +17,7 @@ const upload = multer({
 const ragConfig = new RagConfig();
 const pdfParser = new PdfJsDocumentParser(ragConfig);
 const validator = new ValidatorService(ragConfig);
+const extractor = new ExtractorService(pdfParser, ragConfig);
 
 app.use(express.json());
 
@@ -44,7 +46,7 @@ const openApiDocument = {
       post: {
         summary: "Parse and validate a PDF",
         description:
-          "Parses PDF text and font geometry with PDF.js, converts it to ExtractedPdfData, and runs ValidatorService. Hierarchy extraction and chunking remain separate pipeline stages.",
+          "Parses PDF text and font geometry with PDF.js, runs ValidatorService, and on successful validation builds a structured document hierarchy with ExtractorService. Chunking remains disconnected until the exact tokenizer is selected.",
         requestBody: {
           required: true,
           content: {
@@ -112,6 +114,20 @@ app.post(
           ? Object.fromEntries(extractedPdfData.font_size_frequency)
           : extractedPdfData.font_size_frequency;
 
+      let hierarchyDurationMs: number | null = null;
+      let hierarchyResult: ReturnType<ExtractorService["extractParsedDocument"]> | null = null;
+      let hierarchyStatus: "completed" | "skipped" = "skipped";
+      let hierarchySkipReason: string | null = null;
+
+      if (validationReport.isValid()) {
+        const hierarchyStartedAt = performance.now();
+        hierarchyResult = extractor.extractParsedDocument(parsed.document);
+        hierarchyDurationMs = performance.now() - hierarchyStartedAt;
+        hierarchyStatus = "completed";
+      } else {
+        hierarchySkipReason = "Hierarchy extraction was skipped because PDF validation failed.";
+      }
+
       const totalDurationMs = performance.now() - requestStartedAt;
       const totalDurationSeconds = totalDurationMs / 1000;
       const pipelineStages = [
@@ -139,9 +155,19 @@ app.post(
         },
         {
           stage: "hierarchy_extraction",
-          status: "not_connected",
-          duration_ms: null,
-          reason: "The parsed PDF is not yet passed through ExtractorService.",
+          status: hierarchyStatus,
+          duration_ms:
+            hierarchyDurationMs === null
+              ? null
+              : Number(hierarchyDurationMs.toFixed(3)),
+          ...(hierarchySkipReason === null
+            ? {
+                is_successful: hierarchyResult?.is_successful ?? false,
+                ...(hierarchyResult?.error
+                  ? { error: hierarchyResult.error }
+                  : {}),
+              }
+            : { reason: hierarchySkipReason }),
         },
         {
           stage: "chunking",
@@ -156,6 +182,13 @@ app.post(
         file_size_bytes: request.file.size,
         page_count: parsed.document.pages.length,
         pages,
+        hierarchy_extraction: hierarchyResult
+          ? {
+              is_successful: hierarchyResult.is_successful,
+              error: hierarchyResult.error,
+              document: hierarchyResult.document,
+            }
+          : null,
         validation: {
           is_valid: validationReport.isValid(),
           configuration_valid: validationReport.configuration_valid,
