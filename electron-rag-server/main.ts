@@ -107,6 +107,10 @@ app.post(
       const validationStartedAt = performance.now();
       const validationReport = validator.validate(extractedPdfData);
       const validationDurationMs = performance.now() - validationStartedAt;
+      const fontSizeFrequency =
+        extractedPdfData.font_size_frequency instanceof Map
+          ? Object.fromEntries(extractedPdfData.font_size_frequency)
+          : extractedPdfData.font_size_frequency;
 
       const totalDurationMs = performance.now() - requestStartedAt;
       const totalDurationSeconds = totalDurationMs / 1000;
@@ -160,9 +164,7 @@ app.post(
           extracted_data: {
             line_count: extractedPdfData.lines.length,
             ordered_font_sizes: extractedPdfData.ordered_font_sizes,
-            font_size_frequency: Object.fromEntries(
-              extractedPdfData.font_size_frequency,
-            ),
+            font_size_frequency: fontSizeFrequency,
             body_font_size: extractedPdfData.body_font_size,
           },
         },
