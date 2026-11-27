@@ -351,7 +351,7 @@ function traverse(
 }
 
 export class ChunkerService {
-  private readonly config: ChunkerConfig;
+  private readonly config: RagConfig;
 
   public constructor(
     config: Partial<RagConfig>,
