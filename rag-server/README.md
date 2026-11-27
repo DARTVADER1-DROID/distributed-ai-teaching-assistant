@@ -17,7 +17,6 @@ The repository uses one build system and one dependency manager across platforms
 - Ninja
 - Clang/LLVM on Windows and Linux; Apple Clang on macOS
 - vcpkg manifest mode for third-party dependencies
-- GoogleTest is not currently required; no test framework is added until actual unit tests exist
 
 Windows uses `clang-cl` with the Visual Studio C++ Build Tools, linker, and Windows SDK. This preserves compatibility with the Windows C/C++ runtime while using Clang as the compiler. Linux uses upstream Clang. macOS uses Apple Clang.
 
@@ -25,13 +24,11 @@ The vcpkg baseline is pinned in `vcpkg.json`. Do not install Poppler manually or
 
 ## Prerequisites
 
-Install the following:
-
 | Platform | Required tools |
 |---|---|
 | Windows 10/11 x64 | Git, CMake 3.25+, Ninja, LLVM/Clang, Visual Studio C++ Build Tools and Windows SDK |
 | Linux x64 | Git, CMake 3.25+, Ninja, Clang, pkg-config and the platform's standard build utilities |
-| macOS ARM64 | Xcode Command Line Tools, Git, CMake 3.25+, Ninja and pkg-config |
+| macOS x64 or ARM64 | Xcode Command Line Tools, Git, CMake 3.25+, Ninja and pkg-config |
 
 vcpkg is bootstrapped locally; the repository pins the exact vcpkg revision through its manifest baseline.
 
@@ -90,11 +87,18 @@ cmake --preset linux-clang
 cmake --build --preset linux-clang --parallel 2
 ```
 
-### macOS ARM64 (Apple Clang + Ninja)
+### macOS x64 (Apple Clang + Ninja)
 
 ```bash
 cmake --preset macos-clang
 cmake --build --preset macos-clang --parallel 2
+```
+
+### macOS Apple Silicon (Apple Clang + Ninja)
+
+```bash
+cmake --preset macos-arm64-clang
+cmake --build --preset macos-arm64-clang --parallel 2
 ```
 
 The presets select the compiler, Ninja generator, vcpkg toolchain, target triplet and isolated build directory. Do not reuse a build directory after changing compiler, architecture, generator or triplet; remove that preset's build directory and configure again.
