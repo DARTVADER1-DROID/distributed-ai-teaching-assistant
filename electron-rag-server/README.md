@@ -4,6 +4,19 @@ A local Node.js/TypeScript RAG backend for PDF course ingestion, hierarchical
 extraction, chunking, dense BGE-M3 embeddings, LanceDB persistence and semantic
 retrieval. It exposes a REST API and Swagger UI for local development.
 
+## Documentation
+
+- [Architecture](./docs/ARCHITECTURE.md) — component responsibilities, boundaries and data flow.
+- [Ingestion and retrieval pipeline](./docs/PIPELINE.md) — PDF processing through semantic search.
+- [HTTP API reference](./docs/API.md) — endpoints, payloads and response codes.
+- [Storage and data model](./docs/DATA-MODEL.md) — LanceDB schemas and generation lifecycle.
+- [PDF validator authoring guide](./VALIDATOR-GUIDE.md) — precise font-size, hierarchy and closure rules.
+- [Development and testing](./docs/DEVELOPMENT.md) — local setup and test commands.
+- [Troubleshooting](./docs/TROUBLESHOOTING.md) — common runtime and ingestion issues.
+- [VDB Manager](./vdb-manager/README.md) — course lifecycle and persistence behavior.
+- [BGE-M3 model setup](./models/README.md) — pinned model files and download instructions.
+
+
 ## PDF validation contract
 
 See [VALIDATOR-GUIDE.md](./VALIDATOR-GUIDE.md) for the exact PDF authoring rules enforced by the ingestion validator, including configured font sizes and tolerances, heading recognition, level-specific closure markers, hierarchy transitions, page-boundary behavior, and common validation errors.
