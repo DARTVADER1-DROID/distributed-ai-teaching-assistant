@@ -4,7 +4,7 @@ import { CourseRepository } from "./course-repository.js";
 export class DeleteAllCourses {
   public constructor(private readonly repository: CourseRepository) {}
 
-  public async execute(): Promise<void> {
-    await this.repository.deleteAll();
+  public async execute(): Promise<number> {
+    return this.repository.deleteAll();
   }
 }
