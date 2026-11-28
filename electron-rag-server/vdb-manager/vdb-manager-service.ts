@@ -1,5 +1,6 @@
 import type { ExtractionResult } from "../extractor/extractor-service.js";
-import type { Course } from "./course.js";
+import type { Course, CreateCourseRequest } from "./course.js";
+import type { CoursePipelineResult } from "./create-course.js";
 import { CreateCourse } from "./create-course.js";
 import { UpdateCourse } from "./update-course.js";
 import { DeleteCourse } from "./delete-course.js";
@@ -7,21 +8,21 @@ import { GetCourse } from "./get-course.js";
 import { GetAllCourses } from "./get-all-courses.js";
 import { DeleteAllCourses } from "./delete-all-courses.js";
 
-/**
- * Coordinates course operations for the vector database layer.
- * Operation implementations and the storage provider are intentionally
- * deferred; this service currently exposes the planned API only.
- */
+/** Coordinates course operations for the vector database layer. */
 export class VdbManagerService {
-  private readonly createCourseOperation = new CreateCourse();
   private readonly updateCourseOperation = new UpdateCourse();
   private readonly deleteCourseOperation = new DeleteCourse();
   private readonly getCourseOperation = new GetCourse();
   private readonly getAllCoursesOperation = new GetAllCourses();
   private readonly deleteAllCoursesOperation = new DeleteAllCourses();
 
-  public createCourse(course: Course): Promise<void> {
-    return this.createCourseOperation.execute(course);
+  public constructor(
+    private readonly createCourseOperation: CreateCourse,
+  ) {}
+
+  /** Runs the configured PDF-to-embedding pipeline for a new course. */
+  public createCourse(request: CreateCourseRequest): Promise<CoursePipelineResult> {
+    return this.createCourseOperation.execute(request);
   }
 
   /** Replaces all existing extracted material with replacementMaterial. */
