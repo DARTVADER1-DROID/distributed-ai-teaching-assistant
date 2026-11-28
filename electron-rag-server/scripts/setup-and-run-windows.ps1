@@ -246,7 +246,7 @@ function Ensure-NpmDependencies {
 
     $dependenciesHealthy = $false
     if (Test-Path "node_modules") {
-        & npm ls --all *> $null
+        & npm ls --depth=0 *> $null
         $dependenciesHealthy = ($LASTEXITCODE -eq 0)
     }
 
