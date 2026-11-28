@@ -111,6 +111,9 @@ export class CourseRepository {
       course_id: record.course_id,
       document_name: record.document_name,
       document_hash: record.document_hash,
+      active_generation_id: record.active_generation_id,
+      created_at: record.created_at,
+      updated_at: record.updated_at,
       material: deserializeCourseMaterial(record),
     };
   }
@@ -121,6 +124,9 @@ export class CourseRepository {
       course_id: record.course_id,
       document_name: record.document_name,
       document_hash: record.document_hash,
+      active_generation_id: record.active_generation_id,
+      created_at: record.created_at,
+      updated_at: record.updated_at,
       material: deserializeCourseMaterial(record),
     }));
   }
