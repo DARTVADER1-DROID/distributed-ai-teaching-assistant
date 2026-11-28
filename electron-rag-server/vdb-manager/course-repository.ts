@@ -129,9 +129,14 @@ export class CourseRepository {
     return true;
   }
 
-  public async deleteAll(): Promise<void> {
+  public async deleteAll(): Promise<number> {
+    const existingCourses = await this.courses.query().toArray();
+    const deletedCount = existingCourses.length;
+
     await this.chunks.delete("course_id IS NOT NULL");
     await this.courses.delete("course_id IS NOT NULL");
+
+    return deletedCount;
   }
 
   private async findRecord(courseId: string): Promise<CourseRecord | null> {
