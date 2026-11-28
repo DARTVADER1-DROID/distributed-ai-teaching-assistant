@@ -18,7 +18,8 @@
     "validator/**/*.ts",
     "extractor/**/*.ts",
     "chunker/**/*.ts",
-    "embedding/**/*.ts"
+    "embedding/**/*.ts",
+    "vdb-manager/**/*.ts"
   ],
   "exclude": [
     "node_modules",
