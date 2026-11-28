@@ -22,11 +22,11 @@ echo [INFO] npm:
 npm --version
 echo.
 
-REM Install exactly from the lockfile whenever one is present.
-REM npm output remains visible; npm-install.log captures verbose diagnostics.
+REM Use the committed lockfile for reproducible installs.
+REM Keep npm output visible and write verbose diagnostics to npm-install.log.
 if exist "package-lock.json" goto :install_ci
 
-echo [INFO] No package-lock.json found. Running npm install to create it.
+echo [INFO] No package-lock.json found. Running npm install.
 call npm install --loglevel verbose --logfile "%~dp0npm-install.log"
 if errorlevel 1 goto :install_failed
 goto :verify_install
@@ -42,10 +42,6 @@ if not exist "node_modules" (
     goto :failed
 )
 
-if not exist "node_modules\\.package-lock.json" (
-    echo [WARNING] node_modules package metadata was not found. Continuing to build.
-)
-
 echo.
 echo [INFO] Running TypeScript build and complete test suite...
 call npm run build
@@ -58,6 +54,7 @@ echo [INFO] Swagger UI: http://localhost:3000/docs
 echo [INFO] Press Ctrl+C to stop the server.
 echo.
 call npm start
+if errorlevel 1 goto :runtime_failed
 
 echo.
 echo [INFO] Server process has stopped.
@@ -83,6 +80,11 @@ goto :failed
 :build_failed
 echo.
 echo [ERROR] Build or test suite failed. The server was not started.
+goto :failed
+
+:runtime_failed
+echo.
+echo [ERROR] The server process exited with an error.
 goto :failed
 
 :failed
