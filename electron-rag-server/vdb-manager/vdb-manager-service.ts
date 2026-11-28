@@ -58,7 +58,7 @@ export class VdbManagerService {
     return this.getAllOperation.execute();
   }
 
-  public deleteAllCourses(): Promise<void> {
+  public deleteAllCourses(): Promise<number> {
     return this.serializeWrite(() => this.deleteAllOperation.execute());
   }
 
