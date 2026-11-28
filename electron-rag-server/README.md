@@ -23,7 +23,8 @@ npm --version
 Run these commands from this `electron-rag-server` directory:
 
 ```bash
-npm install
+npm install --package-lock-only
+npm ci
 npm run build
 npm start
 ```
@@ -34,10 +35,10 @@ For development with automatic restart:
 npm run dev
 ```
 
-The first `npm install` resolves the pinned direct dependencies and creates
-`package-lock.json` if it is not present. Keep that generated lockfile and use
-`npm ci` for subsequent clean/reproducible installs. Do not delete the lockfile
-after it has been generated.
+The first `npm install --package-lock-only` resolves the exact direct dependency
+versions and creates `package-lock.json`. Commit that generated lockfile to the
+repository, then use `npm ci` for clean/reproducible installs. Do not delete the
+lockfile after it has been generated.
 
 The build command runs the TypeScript compiler and the complete test suite:
 schema, duplicate detection, pipeline, real PDF.js parser integration,
