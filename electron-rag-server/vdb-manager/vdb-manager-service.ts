@@ -1,5 +1,7 @@
 import type { Course, CreateCourseRequest } from "./course.js";
 import type { CoursePipelineResult } from "./create-course.js";
+import type { EmbeddingService } from "../embedding/embedding-service.js";
+import { SearchCourses, type SearchCoursesOptions } from "./search-courses.js";
 import { CreateCourse } from "./create-course.js";
 import { CourseRepository } from "./course-repository.js";
 import { CreateCourseOperation } from "./create-course-operation.js";
@@ -21,6 +23,7 @@ export class VdbManagerService {
   private readonly getOperation: GetCourse;
   private readonly getAllOperation: GetAllCourses;
   private readonly deleteAllOperation: DeleteAllCourses;
+  private readonly searchOperation: SearchCourses;
   private writeQueue: Promise<void> = Promise.resolve();
 
   public constructor(
@@ -32,7 +35,7 @@ export class VdbManagerService {
     this.deleteOperation = new DeleteCourse(repository);
     this.getOperation = new GetCourse(repository);
     this.getAllOperation = new GetAllCourses(repository);
-    this.deleteAllOperation = new DeleteAllCourses(repository);
+    this.deleteAllOperation = new DeleteAllCourses(repository);\n    this.searchOperation = new SearchCourses(repository, queryEmbedder);
   }
 
   public createCourse(request: CreateCourseRequest): Promise<CoursePipelineResult> {
@@ -58,7 +61,7 @@ export class VdbManagerService {
     return this.getAllOperation.execute();
   }
 
-  public deleteAllCourses(): Promise<number> {
+  public searchCourses(query: string, options: SearchCoursesOptions = {}) {\n    return this.searchOperation.execute(query, options);\n  }\n\n  public deleteAllCourses(): Promise<number> {
     return this.serializeWrite(() => this.deleteAllOperation.execute());
   }
 
