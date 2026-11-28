@@ -8,6 +8,10 @@ export interface Course {
   document_name: string;
   /** SHA-256 fingerprint of the exact uploaded file bytes. */
   document_hash: string;
+  /** Active persisted vector generation; exposed as metadata only. */
+  active_generation_id: string;
+  created_at: string;
+  updated_at: string;
   material: ExtractionResult;
 }
 
