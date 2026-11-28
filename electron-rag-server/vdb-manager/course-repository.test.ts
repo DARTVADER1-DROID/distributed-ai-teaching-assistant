@@ -142,6 +142,9 @@ async function runCourseRepositoryTest(): Promise<void> {
     assert.equal(searchResults.results[0]?.content, "body second");
     assert.deepEqual(searchResults.results[0]?.heading_path, ["heading"]);
     assert.equal(searchResults.results[0]?.document_name, "second.pdf");
+    const globalSearchResults = await manager.searchCourses("find the second lecture", { top_k: 3 });
+    assert.equal(globalSearchResults.results.length, 1);
+    assert.equal(globalSearchResults.results[0]?.course_id, id);
     await assert.rejects(manager.searchCourses("   "), /non-empty string/);
     await assert.rejects(manager.searchCourses("valid", { top_k: 0 }), /between 1 and 50/);
     await assert.rejects(
