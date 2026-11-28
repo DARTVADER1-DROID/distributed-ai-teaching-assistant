@@ -117,6 +117,34 @@ const openApiDocument = {
           deleted_count: { type: "integer", minimum: 0 },
         },
       },
+      RetrievedChunk: {
+        type: "object",
+        required: ["chunk_id", "course_id", "document_name", "chunk_index", "content", "heading_path", "token_count", "start_page_number", "start_line_number", "end_page_number", "end_line_number", "distance"],
+        properties: {
+          chunk_id: { type: "string", format: "uuid" },
+          course_id: { type: "string", format: "uuid" },
+          document_name: { type: "string" },
+          chunk_index: { type: "integer", minimum: 0 },
+          content: { type: "string" },
+          heading_path: { type: "array", items: { type: "string" } },
+          token_count: { type: "integer", minimum: 0 },
+          start_page_number: { type: "integer", minimum: 0 },
+          start_line_number: { type: "integer", minimum: 0 },
+          end_page_number: { type: "integer", minimum: 0 },
+          end_line_number: { type: "integer", minimum: 0 },
+          distance: { type: "number", minimum: 0, description: "Cosine distance; lower values indicate closer vectors." },
+        },
+      },
+      RetrievalSearchResult: {
+        type: "object",
+        required: ["query", "course_id", "top_k", "results"],
+        properties: {
+          query: { type: "string" },
+          course_id: { type: ["string", "null"], format: "uuid" },
+          top_k: { type: "integer" },
+          results: { type: "array", items: { $ref: "#/components/schemas/RetrievedChunk" } },
+        },
+      },
       CourseProcessingResult: {
         type: "object",
         required: ["course_id", "document_name", "page_count", "chunk_count", "embedding_output"],
@@ -186,7 +214,7 @@ const openApiDocument = {
           },
         },
         responses: {
-          "200": { description: "Ranked matching chunks with source locations and cosine distance." },
+          "200": { description: "Ranked matching chunks with source locations and cosine distance.", content: { "application/json": { schema: { $ref: "#/components/schemas/RetrievalSearchResult" } } } },
           "400": { description: "Invalid query, course ID or top_k." },
           "404": { description: "The requested course does not exist." },
           "500": { description: "Embedding or vector database search failed." },
