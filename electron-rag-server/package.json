@@ -6,7 +6,8 @@
   "description": "Electron-based RAG server",
   "scripts": {
     "dev": "tsx watch main.ts",
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && npm run test:schema",
+    "test:schema": "tsx vdb-manager/course-table-schema.test.ts",
     "start": "node dist/main.js"
   },
   "dependencies": {
