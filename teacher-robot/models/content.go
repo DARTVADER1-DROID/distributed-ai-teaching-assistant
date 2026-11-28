@@ -1,3 +1,5 @@
 package models
 
-type Content struct{}
+type Content struct {
+	Paragraphs []string
+}
