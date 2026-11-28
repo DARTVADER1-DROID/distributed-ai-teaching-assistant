@@ -2,6 +2,7 @@ import express, { type ErrorRequestHandler, type Request } from "express";
 import multer from "multer";
 import swaggerUi from "swagger-ui-express";
 import { connect } from "@lancedb/lancedb";
+import { pathToFileURL } from "node:url";
 import { RagConfig } from "./config/config.js";
 import { PdfJsDocumentParser } from "./pdf/pdfjs-document-parser.js";
 import { ExtractorService } from "./extractor/extractor-service.js";
@@ -16,14 +17,11 @@ import { CreateCourse, CourseCreationStageError } from "./vdb-manager/create-cou
 import { CourseDuplicateError } from "./vdb-manager/course-duplicate-error.js";
 import { VdbManagerService } from "./vdb-manager/vdb-manager-service.js";
 
-const app = express();
 const port = Number(process.env.PORT ?? 3000);
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 25 * 1024 * 1024, files: 1 },
 });
-app.use(express.json({ limit: "2mb" }));
-
 const openApiDocument = {
   openapi: "3.1.0",
   info: {
@@ -264,7 +262,9 @@ function uploadRequest(request: Request): { document_name: string; document_byte
 
 class HttpInputError extends Error {}
 
-function installRoutes(vdbManager: VdbManagerService): void {
+export function createApp(vdbManager: VdbManagerService): express.Express {
+  const app = express();
+  app.use(express.json({ limit: "2mb" }));
   app.get("/health", (_request, response) => response.status(200).json({ status: "ok" }));
   app.get("/openapi.json", (_request, response) => response.json(openApiDocument));
   app.use("/docs", swaggerUi.serve, swaggerUi.setup(openApiDocument, {
@@ -337,6 +337,7 @@ function installRoutes(vdbManager: VdbManagerService): void {
     });
   };
   app.use(errorHandler);
+  return app;
 }
 
 async function main(): Promise<void> {
@@ -358,7 +359,7 @@ async function main(): Promise<void> {
   });
 
   const vdbManager = new VdbManagerService(pipeline, repository);
-  installRoutes(vdbManager);
+  const app = createApp(vdbManager);
 
   const server = app.listen(port, () => {
     console.log(`Electron RAG VDB manager listening on http://localhost:${port}`);
@@ -377,7 +378,9 @@ async function main(): Promise<void> {
   process.once("SIGTERM", shutdown);
 }
 
-void main().catch((error: unknown) => {
-  console.error("Failed to start Electron RAG VDB manager:", error);
-  process.exitCode = 1;
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  void main().catch((error: unknown) => {
+    console.error("Failed to start Electron RAG VDB manager:", error);
+    process.exitCode = 1;
+  });
+}
