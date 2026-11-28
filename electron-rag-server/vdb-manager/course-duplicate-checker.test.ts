@@ -44,6 +44,14 @@ async function runDuplicateCheckerIntegrationTest(): Promise<void> {
       updated_at: timestamp,
     }]);
 
+    // An update excludes its own course from duplicate detection.
+    const sameCourseIdentity = await identityFactory.createIdentity(
+      "Engineering.pdf",
+      originalBytes,
+      firstIdentity.course_id,
+    );
+    assert.equal(sameCourseIdentity.course_id, firstIdentity.course_id);
+
     // Same filename with different bytes must be rejected.
     await assert.rejects(
       identityFactory.createIdentity(
