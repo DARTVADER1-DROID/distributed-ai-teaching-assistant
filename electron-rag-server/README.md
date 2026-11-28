@@ -18,6 +18,37 @@ node --version
 npm --version
 ```
 
+## One-click Windows setup
+
+On Windows, open the `electron-rag-server` folder and double-click:
+
+```text
+START-WINDOWS.bat
+```
+
+The launcher runs `scripts/setup-and-run-windows.ps1`. It checks the supported
+Node.js runtime, npm dependency installation, Python/Hugging Face CLI download
+tooling, and every required BGE-M3 file. If something is missing, it installs
+the required tooling (using Windows Package Manager where needed), generates
+the npm lockfile if this is the first run, installs npm dependencies, or
+downloads the pinned model snapshot into the configured model directories.
+It then runs the TypeScript build and full test suite, and starts the server.
+
+On subsequent launches it reuses a healthy `node_modules` installation and
+complete model folders. The Hugging Face download is only run for a model
+directory with missing or empty required files. The model download is about
+2.27 GB for the ONNX external data file, so the first run needs a reliable
+internet connection and sufficient free disk space.
+
+If Node.js or Python must be installed, the script uses `winget`; install
+Windows App Installer if `winget` is unavailable. The script does not bypass
+build/test failures: it stops and leaves the error visible rather than
+launching a broken server. Keep the launcher window open while using the
+server; press Ctrl+C in it to stop the server.
+
+The first run may create `package-lock.json` locally. Commit that file to Git
+after setup so the dependency tree is locked for future machines.
+
 ## Install and run
 
 Run these commands from this `electron-rag-server` directory:
