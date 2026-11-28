@@ -21,14 +21,14 @@ export class RagConfig {
   public model_directory = "./models";
 
   /** Relative (or absolute) path to the BGE-M3 tokenizer directory. */
-  public tokenizer_model_directory = "bge-m3-tokenizer";
+  public tokenizer_model_directory = "bge-m3-onnx";
 
   /** Relative (or absolute) path to the Transformers.js ONNX model directory. */
   public embedding_model_directory = "bge-m3-onnx";
 
   /** Hugging Face repository and immutable revision used to prepare the tokenizer files. */
-  public tokenizer_model_id = "BAAI/bge-m3";
-  public tokenizer_model_revision = "b28ce2a6fcc9c75ef1c0619575d0ec19af760082";
+  public tokenizer_model_id = "onnx-community/bge-m3-ONNX";
+  public tokenizer_model_revision = "25b9af8e87a38eb120cfe87125383677b9cd309e";
 
   /** Hugging Face repository and immutable revision used to prepare the ONNX model files. */
   public embedding_model_id = "onnx-community/bge-m3-ONNX";
@@ -68,7 +68,7 @@ export class RagConfig {
     return new RagConfig({
       model_directory: process.env.MODEL_DIRECTORY ?? "./models",
       tokenizer_model_directory:
-        process.env.TOKENIZER_MODEL_DIRECTORY ?? "bge-m3-tokenizer",
+        process.env.TOKENIZER_MODEL_DIRECTORY ?? "bge-m3-onnx",
       embedding_model_directory:
         process.env.EMBEDDING_MODEL_DIRECTORY ?? "bge-m3-onnx",
     });
