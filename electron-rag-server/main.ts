@@ -1,4 +1,4 @@
-import express, { type ErrorRequestHandler, type Request, type Response } from "express";
+import express, { type ErrorRequestHandler, type Request } from "express";
 import multer from "multer";
 import swaggerUi from "swagger-ui-express";
 import { connect } from "@lancedb/lancedb";
@@ -34,7 +34,7 @@ const openApiDocument = {
   servers: [{ url: "/" }],
   tags: [
     { name: "Health", description: "Service availability." },
-    { name: "Courses", description: "Create, inspect, replace and delete course material." },
+    { name: "Courses", description: "Create PDF-backed courses and list the stored course catalogue." },
   ],
   components: {
     schemas: {
@@ -150,7 +150,7 @@ const openApiDocument = {
         requestBody: { $ref: "#/components/requestBodies/PdfUpload" },
         responses: {
           "201": { description: "Course processed, embedded and persisted.", content: { "application/json": { schema: { $ref: "#/components/schemas/CourseProcessingResult" } } } },
-          "400": { description: "Invalid PDF or validation failure.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          "400": { description: "Missing PDF upload or malformed request.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
           "409": { description: "Duplicate filename or document content.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
           "413": { description: "Upload exceeds 25 MB." },
           "422": { description: "PDF validation, extraction, chunking or embedding failed.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
@@ -247,10 +247,6 @@ function installRoutes(vdbManager: VdbManagerService): void {
         stage: error.stage,
         details: error.details instanceof Error ? error.details.message : error.details,
       });
-      return;
-    }
-    if (error instanceof CourseNotFoundError) {
-      response.status(404).json({ error: error.message });
       return;
     }
     if (error instanceof HttpInputError) {
