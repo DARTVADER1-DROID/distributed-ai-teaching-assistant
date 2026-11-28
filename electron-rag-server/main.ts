@@ -434,7 +434,11 @@ export function createApp(vdbManager: VdbManagerService): express.Express {
       response.status(413).json({ error: "PDF exceeds the 25 MB upload limit." });
       return;
     }
-    if (error instanceof SearchInputError) {\n      response.status(400).json({ error: error.message });\n      return;\n    }\n    if (error instanceof CourseNotFoundError) {
+    if (error instanceof SearchInputError) {
+      response.status(400).json({ error: error.message });
+      return;
+    }
+    if (error instanceof CourseNotFoundError) {
       response.status(404).json({ error: error.message });
       return;
     }
@@ -499,7 +503,9 @@ async function main(): Promise<void> {
     loadEmbedder: getEmbeddingService,
   });
 
-  const vdbManager = new VdbManagerService(pipeline, repository, {\n    embedTexts: async (texts) => (await getEmbeddingService()).embedTexts(texts),\n  });
+  const vdbManager = new VdbManagerService(pipeline, repository, {
+    embedTexts: async (texts) => (await getEmbeddingService()).embedTexts(texts),
+  });
   const app = createApp(vdbManager);
 
   const server = app.listen(port, () => {
