@@ -501,7 +501,7 @@ export function createApp(vdbManager: VdbManagerService): express.Express {
 }
 
 async function main(): Promise<void> {
-  const config = new RagConfig();
+  const config = RagConfig.fromEnvironment();
   const connection = await connect(process.env.LANCEDB_URI ?? "./data/lancedb");
   const tables = await new CourseTableManager(connection).ensureTables();
   const repository = new CourseRepository(tables.courses, tables.courseChunks);
@@ -512,7 +512,7 @@ async function main(): Promise<void> {
   let embeddingServicePromise: Promise<EmbeddingService> | undefined;
   const getEmbeddingService = (): Promise<EmbeddingService> => {
     if (!embeddingServicePromise) {
-      const pending = EmbeddingService.load();
+      const pending = EmbeddingService.load(config);
       embeddingServicePromise = pending;
       void pending.catch(() => {
         if (embeddingServicePromise === pending) embeddingServicePromise = undefined;
@@ -527,7 +527,7 @@ async function main(): Promise<void> {
     validator: new ValidatorService(config),
     extractor: new ExtractorService(pdfParser, config),
     config,
-    loadTokenizer: () => BgeM3Tokenizer.load(),
+    loadTokenizer: () => BgeM3Tokenizer.load(config),
     loadEmbedder: getEmbeddingService,
   });
 
@@ -541,6 +541,8 @@ async function main(): Promise<void> {
     console.log(`OpenAPI document: http://localhost:${port}/openapi.json`);
     console.log(`Swagger UI: http://localhost:${port}/docs`);
     console.log(`LanceDB: ${process.env.LANCEDB_URI ?? "./data/lancedb"}`);
+    console.log(`Tokenizer model: ${config.getTokenizerModelPath()}`);
+    console.log(`Embedding model: ${config.getEmbeddingModelPath()}`);
   });
 
   const shutdown = (): void => {
