@@ -80,7 +80,7 @@ async function runCourseRepositoryTest(): Promise<void> {
         return result;
       },
     } as unknown as CreateCourse;
-    const manager = new VdbManagerService(replacementPipeline, repository);
+    const manager = new VdbManagerService(replacementPipeline, repository, {\n      async embedTexts(texts: string[]) {\n        return { model_id: "test-model", dimensions: 1024, embeddings: texts.map(() => Array.from({ length: 1024 }, () => 0.125)) };\n      },\n    });
 
     await repository.create(initial);
     const created = await repository.get(id);
@@ -131,6 +131,18 @@ async function runCourseRepositoryTest(): Promise<void> {
       .toArray();
     assert.equal(activeRows.length, 1);
     assert.equal(activeRows[0]?.content, "body second");
+
+    const searchResults = await manager.searchCourses("find the second lecture", { course_id: id, top_k: 3 });
+    assert.equal(searchResults.results.length, 1);
+    assert.equal(searchResults.results[0]?.content, "body second");
+    assert.deepEqual(searchResults.results[0]?.heading_path, ["heading"]);
+    assert.equal(searchResults.results[0]?.document_name, "second.pdf");
+    await assert.rejects(manager.searchCourses("   "), /non-empty string/);
+    await assert.rejects(manager.searchCourses("valid", { top_k: 0 }), /between 1 and 50/);
+    await assert.rejects(
+      manager.searchCourses("valid", { course_id: "00000000-0000-4000-8000-000000000000" }),
+      CourseNotFoundError,
+    );
 
     assert.equal(await manager.deleteCourse(id), true);
     assert.equal(await repository.get(id), null);
