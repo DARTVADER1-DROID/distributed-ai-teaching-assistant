@@ -64,6 +64,9 @@ export class CourseRepository {
     if (!existing) {
       throw new CourseNotFoundError(courseId);
     }
+    if (result.identity.course_id !== courseId) {
+      throw new Error("A course replacement must preserve the existing course ID.");
+    }
 
     const generationId = randomUUID();
     const chunkRows = this.toChunkRecords(result, generationId);
