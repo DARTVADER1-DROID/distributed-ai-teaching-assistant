@@ -141,7 +141,17 @@ const openApiDocument = {
         summary: "List all courses",
         operationId: "listCourses",
         responses: {
-          "200": { description: "Stored courses.", content: { "application/json": { schema: { type: "array", items: { $ref: "#/components/schemas/CourseSummary" } } } },
+          "200": {
+            description: "Stored courses.",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "array",
+                  items: { $ref: "#/components/schemas/CourseSummary" },
+                },
+              },
+            },
+          },
         },
       },
       delete: {
@@ -168,7 +178,14 @@ const openApiDocument = {
         operationId: "replaceCourse",
         requestBody: { $ref: "#/components/requestBodies/PdfUpload" },
         responses: {
-          "200": { description: "Replacement processed and persisted.", content: { "application/json": { schema: { $ref: "#/components/schemas/CourseProcessingResult" } } },
+          "200": {
+            description: "Replacement processed and persisted.",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/CourseProcessingResult" },
+              },
+            },
+          },
           "404": { description: "Course not found." },
           "409": { description: "Replacement conflicts with another course." },
         },
