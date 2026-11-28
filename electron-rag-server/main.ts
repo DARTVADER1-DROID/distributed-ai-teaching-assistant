@@ -11,7 +11,7 @@ import { EmbeddingService } from "./embedding/embedding-service.js";
 import { CourseTableManager } from "./vdb-manager/course-table-manager.js";
 import { CourseDuplicateChecker } from "./vdb-manager/course-duplicate-checker.js";
 import { CourseIdentityFactory } from "./vdb-manager/course-identity-factory.js";
-import { CourseRepository, CourseNotFoundError } from "./vdb-manager/course-repository.js";
+import { CourseRepository } from "./vdb-manager/course-repository.js";
 import { CreateCourse, CourseCreationStageError } from "./vdb-manager/create-course.js";
 import { CourseDuplicateError } from "./vdb-manager/course-duplicate-error.js";
 import { VdbManagerService } from "./vdb-manager/vdb-manager-service.js";
@@ -46,14 +46,38 @@ const openApiDocument = {
           details: {},
         },
       },
-      CourseSummary: {
+      DocumentNode: {
+        type: "object",
+        required: ["type", "heading_level", "text", "page_number", "line_number", "end_page_number", "page_count", "end_line_number", "children"],
+        properties: {
+          type: { type: "string", enum: ["Document", "Heading", "Paragraph"] },
+          heading_level: { type: "integer", minimum: 0, maximum: 6 },
+          text: { type: "string" },
+          page_number: { type: "integer", minimum: 0 },
+          line_number: { type: "integer", minimum: 0 },
+          end_page_number: { type: "integer", minimum: 0 },
+          page_count: { type: "integer", minimum: 0 },
+          end_line_number: { type: "integer", minimum: 0 },
+          children: { type: "array", items: { $ref: "#/components/schemas/DocumentNode" } },
+        },
+      },
+      ExtractionResult: {
+        type: "object",
+        required: ["is_successful", "error", "document"],
+        properties: {
+          is_successful: { type: "boolean" },
+          error: { type: "string" },
+          document: { $ref: "#/components/schemas/DocumentNode" },
+        },
+      },
+      Course: {
         type: "object",
         required: ["course_id", "document_name", "document_hash", "material"],
         properties: {
           course_id: { type: "string", format: "uuid" },
           document_name: { type: "string" },
           document_hash: { type: "string", pattern: "^[a-f0-9]{64}$" },
-          material: { type: "object" },
+          material: { $ref: "#/components/schemas/ExtractionResult" },
         },
       },
       EmbeddingOutput: {
@@ -84,14 +108,6 @@ const openApiDocument = {
         },
       },
     },
-    parameters: {
-      CourseId: {
-        name: "courseId",
-        in: "path",
-        required: true,
-        schema: { type: "string", format: "uuid" },
-      },
-    },
     requestBodies: {
       PdfUpload: {
         required: true,
@@ -103,6 +119,9 @@ const openApiDocument = {
               properties: {
                 file: { type: "string", format: "binary", description: "PDF document, maximum 25 MB." },
               },
+            },
+            encoding: {
+              file: { contentType: "application/pdf" },
             },
           },
         },
@@ -134,6 +153,8 @@ const openApiDocument = {
           "400": { description: "Invalid PDF or validation failure.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
           "409": { description: "Duplicate filename or document content.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
           "413": { description: "Upload exceeds 25 MB." },
+          "422": { description: "PDF validation, extraction, chunking or embedding failed.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          "500": { description: "Unexpected server or persistence error.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
         },
       },
       get: {
@@ -147,54 +168,12 @@ const openApiDocument = {
               "application/json": {
                 schema: {
                   type: "array",
-                  items: { $ref: "#/components/schemas/CourseSummary" },
+                  items: { $ref: "#/components/schemas/Course" },
                 },
               },
             },
           },
         },
-      },
-      delete: {
-        tags: ["Courses"],
-        summary: "Delete all courses",
-        operationId: "deleteAllCourses",
-        responses: { "204": { description: "All courses and chunks deleted." } },
-      },
-    },
-    "/api/courses/{courseId}": {
-      parameters: [{ $ref: "#/components/parameters/CourseId" }],
-      get: {
-        tags: ["Courses"],
-        summary: "Get one course",
-        operationId: "getCourse",
-        responses: {
-          "200": { description: "Course details.", content: { "application/json": { schema: { $ref: "#/components/schemas/CourseSummary" } } } },
-          "404": { description: "Course not found." },
-        },
-      },
-      put: {
-        tags: ["Courses"],
-        summary: "Replace a course with a new PDF",
-        operationId: "replaceCourse",
-        requestBody: { $ref: "#/components/requestBodies/PdfUpload" },
-        responses: {
-          "200": {
-            description: "Replacement processed and persisted.",
-            content: {
-              "application/json": {
-                schema: { $ref: "#/components/schemas/CourseProcessingResult" },
-              },
-            },
-          },
-          "404": { description: "Course not found." },
-          "409": { description: "Replacement conflicts with another course." },
-        },
-      },
-      delete: {
-        tags: ["Courses"],
-        summary: "Delete one course",
-        operationId: "deleteCourse",
-        responses: { "204": { description: "Course and its chunks deleted." }, "404": { description: "Course not found." } },
       },
     },
   },
@@ -249,37 +228,6 @@ function installRoutes(vdbManager: VdbManagerService): void {
 
   app.get("/api/courses", async (_request, response, next) => {
     try { response.status(200).json(await vdbManager.getAllCourses()); }
-    catch (error) { next(error); }
-  });
-
-  app.get("/api/courses/:courseId", async (request, response, next) => {
-    try {
-      const course = await vdbManager.getCourse((Array.isArray(request.params.courseId) ? request.params.courseId[0] : request.params.courseId) ?? "");
-      if (!course) { response.status(404).json({ error: "Course not found." }); return; }
-      response.status(200).json(course);
-    } catch (error) { next(error); }
-  });
-
-  app.put("/api/courses/:courseId", upload.single("file"), async (request, response, next) => {
-    try {
-      const result = await vdbManager.updateCourse(
-        (Array.isArray(request.params.courseId) ? request.params.courseId[0] : request.params.courseId) ?? "",
-        uploadRequest(request),
-      );
-      response.status(200).json(processingResponse(result));
-    } catch (error) { next(error); }
-  });
-
-  app.delete("/api/courses/:courseId", async (request, response, next) => {
-    try {
-      const deleted = await vdbManager.deleteCourse((Array.isArray(request.params.courseId) ? request.params.courseId[0] : request.params.courseId) ?? "");
-      if (!deleted) { response.status(404).json({ error: "Course not found." }); return; }
-      response.status(204).end();
-    } catch (error) { next(error); }
-  });
-
-  app.delete("/api/courses", async (_request, response, next) => {
-    try { await vdbManager.deleteAllCourses(); response.status(204).end(); }
     catch (error) { next(error); }
   });
 
