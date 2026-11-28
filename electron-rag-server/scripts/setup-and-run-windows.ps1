@@ -203,6 +203,7 @@ function Ensure-ModelDirectory([string]$Directory, [string]$RepositoryId, [strin
     }
 
     Write-Host "Model files are missing or incomplete. Downloading the pinned BGE-M3 snapshot..."
+    Ensure-HuggingFaceCli
     New-Item -ItemType Directory -Force -Path $Directory | Out-Null
     $downloadArguments = @(
         "download", $RepositoryId
@@ -308,7 +309,6 @@ try {
     Write-Host "Electron RAG Server - Windows setup and launch" -ForegroundColor Green
     Write-Host "Package directory: $PackageRoot"
     Ensure-Node
-    Ensure-HuggingFaceCli
     Ensure-NpmDependencies
     Ensure-Models
     Start-Server
