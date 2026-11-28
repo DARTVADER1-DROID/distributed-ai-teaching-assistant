@@ -16,6 +16,8 @@ import { CourseRepository } from "./vdb-manager/course-repository.js";
 import { CreateCourse, CourseCreationStageError } from "./vdb-manager/create-course.js";
 import { CourseDuplicateError } from "./vdb-manager/course-duplicate-error.js";
 import { VdbManagerService } from "./vdb-manager/vdb-manager-service.js";
+import { CourseNotFoundError } from "./vdb-manager/course-repository.js";
+import { CourseUnchangedError } from "./vdb-manager/update-course.js";
 
 const port = Number(process.env.PORT ?? 3000);
 const upload = multer({
@@ -32,7 +34,7 @@ const openApiDocument = {
   servers: [{ url: "/" }],
   tags: [
     { name: "Health", description: "Service availability." },
-    { name: "Courses", description: "Create, list and delete PDF-backed courses and manage the stored course catalogue." },
+    { name: "Courses", description: "Create, retrieve, replace and delete PDF-backed courses and manage the stored course catalogue." },
   ],
   components: {
     schemas: {
@@ -208,7 +210,7 @@ const openApiDocument = {
         name: "courseId",
         in: "path",
         required: true,
-        description: "UUID of the course to delete.",
+        description: "UUID of the course to update or delete.",
         schema: { type: "string", format: "uuid" },
       }],
       delete: {
@@ -284,6 +286,19 @@ export function createApp(vdbManager: VdbManagerService): express.Express {
     catch (error) { next(error); }
   });
 
+  app.put("/api/courses/:courseId", upload.single("file"), async (request, response, next) => {
+    try {
+      const courseId = request.params.courseId;
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(courseId)) {
+        response.status(400).json({ error: "Course ID must be a valid UUID." });
+        return;
+      }
+
+      const result = await vdbManager.updateCourse(courseId, uploadRequest(request));
+      response.status(200).json(processingResponse(result));
+    } catch (error) { next(error); }
+  });
+
   app.delete("/api/courses/:courseId", async (request, response, next) => {
     try {
       const courseId = request.params.courseId;
@@ -312,6 +327,14 @@ export function createApp(vdbManager: VdbManagerService): express.Express {
   const errorHandler: ErrorRequestHandler = (error, _request, response, _next) => {
     if (error instanceof multer.MulterError && error.code === "LIMIT_FILE_SIZE") {
       response.status(413).json({ error: "PDF exceeds the 25 MB upload limit." });
+      return;
+    }
+    if (error instanceof CourseNotFoundError) {
+      response.status(404).json({ error: error.message });
+      return;
+    }
+    if (error instanceof CourseUnchangedError) {
+      response.status(409).json({ error: error.message, reason: "COURSE_UNCHANGED" });
       return;
     }
     if (error instanceof CourseDuplicateError) {
