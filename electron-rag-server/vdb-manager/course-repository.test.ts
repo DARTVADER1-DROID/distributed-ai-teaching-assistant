@@ -86,7 +86,8 @@ async function runCourseRepositoryTest(): Promise<void> {
     await assert.rejects(repository.replace(id, pipelineResult(id, "third")), CourseNotFoundError);
 
     await repository.create(pipelineResult(id, "fourth"));
-    await repository.deleteAll();
+    assert.equal(await repository.deleteAll(), 1);
+    assert.equal(await repository.deleteAll(), 0);
     assert.equal((await repository.getAll()).length, 0);
     assert.equal((await tables.courseChunks.query().toArray()).length, 0);
 
