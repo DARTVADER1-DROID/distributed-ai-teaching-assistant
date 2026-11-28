@@ -41,7 +41,8 @@ function pipelineResult(courseId: string, suffix: string): CoursePipelineResult 
     chunks: [{
       index: 0,
       text: `body ${suffix}`,
-      embedding_text: `heading\nbody ${suffix}`,
+      embedding_text: `heading
+body ${suffix}`,
       heading_path: ["heading"],
       token_count: 4,
       start_page_number: 1,
@@ -80,7 +81,11 @@ async function runCourseRepositoryTest(): Promise<void> {
         return result;
       },
     } as unknown as CreateCourse;
-    const manager = new VdbManagerService(replacementPipeline, repository, {\n      async embedTexts(texts: string[]) {\n        return { model_id: "test-model", dimensions: 1024, embeddings: texts.map(() => Array.from({ length: 1024 }, () => 0.125)) };\n      },\n    });
+    const manager = new VdbManagerService(replacementPipeline, repository, {
+      async embedTexts(texts: string[]) {
+        return { model_id: "test-model", dimensions: 1024, embeddings: texts.map(() => Array.from({ length: 1024 }, () => 0.125)) };
+      },
+    });
 
     await repository.create(initial);
     const created = await repository.get(id);
