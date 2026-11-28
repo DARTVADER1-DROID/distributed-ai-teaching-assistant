@@ -1,65 +1,54 @@
 # VDB Manager
 
-The VDB manager exposes course-level operations backed by LanceDB. The
-provider-specific connection is isolated in `lance-db-client.ts`; course
-operations will use that client rather than importing the SDK directly.
+The VDB manager exposes course-level operations backed by embedded LanceDB.
+The provider-specific connection is isolated in `lance-db-client.ts`.
 
 ## Database connection
 
 - SDK: `@lancedb/lancedb` (pinned to `0.41.0`).
 - Default local database URI: `./data/lancedb`.
 - Override the URI with the `LANCEDB_URI` environment variable.
-- The client lazily opens one connection and shares it across operations.
-- LanceDB's embedded mode stores its data in the configured local directory;
-  it does not require a separate database server.
+- One lazily opened connection is shared across operations.
+- A filesystem URI uses embedded storage and does not require a separate database server.
+
+## Course identity and duplicate policy
+
+- Course IDs are generated automatically as UUID v4 values; callers do not supply IDs.
+- The original uploaded filename is stored for display.
+- Filename uniqueness is case-insensitive and compares the normalized basename (directory components are ignored).
+- The exact uploaded bytes are fingerprinted with SHA-256.
+- An existing normalized filename is rejected, even if the new file has different contents.
+- An existing SHA-256 fingerprint is rejected, even if the new file has a different filename.
+- A different filename with different bytes is allowed.
+- SHA-256 detects byte-identical files, not visually or semantically identical PDFs re-exported with changed metadata.
+
+`CourseIdentityFactory` performs filename normalization, SHA-256 calculation, duplicate checks, and UUID assignment. It prepares identity metadata only; it does not run the PDF pipeline or persist a course.
+
+**Concurrency requirement:** LanceDB has no relational unique constraints or multi-table transaction for this workflow. The eventual `CreateCourse` implementation must serialize the entire duplicate-check-to-course-insert operation. A check alone is not an atomic reservation across multiple processes.
 
 ## Course contract
 
-- `course_id` is the unique course identifier.
-- `material` contains the complete `ExtractionResult` produced by the
-  extraction pipeline.
-- Creating an existing `course_id` must fail with
-  `CourseAlreadyExistsError`; create must never overwrite.
-- Updating a course replaces its entire extracted material. It is not a
-  partial update or merge.
+- `Course` is the stored domain object and includes its generated ID, document name, SHA-256 hash, and complete `ExtractionResult`.
+- `CreateCourseRequest` contains the uploaded filename and bytes; it has no ID or caller-supplied hash.
+- Updating a course will replace its complete extracted material, not merge partial content.
 
 ## Operations
 
 | Operation | File | Contract |
 | --- | --- | --- |
-| Create course | `create-course.ts` | Create only if the ID does not exist; otherwise throw a duplicate error. |
+| Create course | `create-course.ts` | Planned orchestration point for identity checks, processing, and persistence. |
 | Update course | `update-course.ts` | Replace all extracted material for the given ID. |
 | Delete course | `delete-course.ts` | Delete one course by ID. |
 | Retrieve course | `get-course.ts` | Return one course by ID, or null when absent. |
 | Show all courses | `get-all-courses.ts` | Return all stored courses. |
 | Delete all courses | `delete-all-courses.ts` | Remove all stored courses. |
 
-Course operation bodies remain intentionally unimplemented. The persisted record contracts are defined in `storage-records.ts`:
-
-- `CourseRecord` stores the complete serialized `ExtractionResult`, the active
-  chunk-generation ID, and creation/update timestamps.
-- `CourseChunkRecord` stores one chunk, its dense vector, exact embedding input,
-  source text, heading path, token count, source page/line range, and embedding
-  model metadata. The heading path is JSON-encoded as a scalar column.
-- `serializeCourseMaterial` and `deserializeCourseMaterial` keep the boundary
-  between the domain extraction type and the persisted JSON representation
-  explicit.
+The PDF validator, extractor, chunker, and embedder are not wired into `CreateCourse` in this change.
 
 ## Physical LanceDB schemas
 
-`course-table-schemas.ts` defines explicit Apache Arrow schemas for both tables.
-The `course_chunks.vector` column is a fixed-size list of 1024 Float32 values,
-matching the current BGE-M3 embedding service contract. All chunk provenance
-fields use the exact names from `DocumentChunk`.
+`courses` stores course identity, normalized filename, SHA-256 fingerprint, complete serialized hierarchy, active chunk-generation ID, and timestamps.
 
-`course-table-manager.ts` creates the two empty tables when absent and opens
-them when already present. It checks existing column names and Arrow types
-before returning handles; it does not overwrite or silently migrate existing
-tables. The manager caches its initialization promise so concurrent callers
-share one initialization attempt.
+`course_chunks` stores one chunk, its dense vector, exact embedding input, source text, heading path, token count, source page/line range, and embedding model metadata. The vector column is a fixed-size list matching the embedding service's declared dimensions.
 
-The LanceDB SDK `0.41.0` declares Apache Arrow as a peer dependency. The server
-now pins `apache-arrow` to `21.2.0`, matching the SDK's own development version.
-
-Embedding generation is not yet integrated or runtime-verified. The physical
-vector column is defined, but this change does not write or index vectors.
+`course-table-manager.ts` creates both empty tables when absent and validates existing schemas when opening them. It does not silently migrate existing tables. Existing local databases created with the previous catalogue schema must be recreated or explicitly migrated before use with this schema.

@@ -8,21 +8,20 @@ import {
 } from "apache-arrow";
 import { EmbeddingService } from "../embedding/embedding-service.js";
 
-/** Stable LanceDB table names used by all VDB manager operations. */
 export const COURSE_TABLE_NAME = "courses";
 export const COURSE_CHUNK_TABLE_NAME = "course_chunks";
-
-/** Keep the vector width tied to the embedding service's declared contract. */
 export const COURSE_VECTOR_DIMENSIONS = EmbeddingService.dimensions;
 
 /**
- * Catalogue schema: one row per course.
- * The complete ExtractionResult remains a JSON payload, preserving its
- * recursive heading/paragraph hierarchy without flattening it into rows.
+ * Catalogue schema: one row per course. Filename and content fingerprints
+ * are persisted here so duplicate checks survive application restarts.
  */
 export function createCourseTableSchema(): Schema {
   return new Schema([
     new Field("course_id", new Utf8(), false),
+    new Field("document_name", new Utf8(), false),
+    new Field("document_name_key", new Utf8(), false),
+    new Field("document_hash", new Utf8(), false),
     new Field("material_json", new Utf8(), false),
     new Field("active_generation_id", new Utf8(), false),
     new Field("created_at", new Utf8(), false),
@@ -30,10 +29,7 @@ export function createCourseTableSchema(): Schema {
   ]);
 }
 
-/**
- * Search schema: one row per chunk generation entry.
- * FixedSizeList<Float32> makes vector dimensionality part of the Arrow schema.
- */
+/** One row per chunk generation entry. */
 export function createCourseChunkTableSchema(): Schema {
   return new Schema([
     new Field("chunk_id", new Utf8(), false),
