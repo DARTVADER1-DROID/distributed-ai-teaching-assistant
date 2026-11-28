@@ -131,6 +131,90 @@ export class CourseRepository {
     }));
   }
 
+  /**
+   * Performs cosine vector search over active generations only. The catalogue
+   * is consulted first so superseded or orphaned chunk generations are never
+   * exposed as current course content.
+   */
+  public async search(
+    vector: number[],
+    topK: number,
+    courseId?: string,
+  ): Promise<Array<{
+    chunk_id: string;
+    course_id: string;
+    document_name: string;
+    chunk_index: number;
+    content: string;
+    heading_path: string[];
+    token_count: number;
+    start_page_number: number;
+    start_line_number: number;
+    end_page_number: number;
+    end_line_number: number;
+    distance: number;
+  }>> {
+    if (vector.length !== 1024 || vector.some((value) => !Number.isFinite(value))) {
+      throw new Error("Search vector must contain exactly 1024 finite values.");
+    }
+    if (!Number.isSafeInteger(topK) || topK < 1 || topK > 50) {
+      throw new Error("Search topK must be an integer between 1 and 50.");
+    }
+
+    let activeCourses: CourseRecord[];
+    if (courseId) {
+      const record = await this.findRecord(courseId);
+      if (!record) throw new CourseNotFoundError(courseId);
+      activeCourses = [record];
+    } else {
+      activeCourses = (await this.courses.query().toArray()) as CourseRecord[];
+    }
+    if (activeCourses.length === 0) return [];
+
+    const activePredicate = activeCourses.map((record) =>
+      `(course_id = ${sqlString(record.course_id)} AND generation_id = ${sqlString(record.active_generation_id)})`,
+    ).join(" OR ");
+
+    const rows = await this.chunks
+      .vectorSearch(vector)
+      .distanceType("cosine")
+      .where(activePredicate)
+      .select([
+        "chunk_id", "course_id", "generation_id", "chunk_index", "content",
+        "heading_path_json", "token_count", "start_page_number",
+        "start_line_number", "end_page_number", "end_line_number", "_distance",
+      ])
+      .limit(topK)
+      .toArray() as Array<CourseChunkRecord & { _distance: number }>;
+
+    const names = new Map(activeCourses.map((record) => [record.course_id, record.document_name]));
+    return rows.map((row) => {
+      let headingPath: unknown;
+      try {
+        headingPath = JSON.parse(row.heading_path_json);
+      } catch {
+        throw new Error(`Stored heading path for chunk '${row.chunk_id}' is corrupted.`);
+      }
+      if (!Array.isArray(headingPath) || headingPath.some((part) => typeof part !== "string")) {
+        throw new Error(`Stored heading path for chunk '${row.chunk_id}' is invalid.`);
+      }
+      return {
+        chunk_id: row.chunk_id,
+        course_id: row.course_id,
+        document_name: names.get(row.course_id) ?? "",
+        chunk_index: row.chunk_index,
+        content: row.content,
+        heading_path: headingPath as string[],
+        token_count: row.token_count,
+        start_page_number: row.start_page_number,
+        start_line_number: row.start_line_number,
+        end_page_number: row.end_page_number,
+        end_line_number: row.end_line_number,
+        distance: row._distance,
+      };
+    });
+  }
+
   public async delete(courseId: string): Promise<boolean> {
     const existing = await this.findRecord(courseId);
 
