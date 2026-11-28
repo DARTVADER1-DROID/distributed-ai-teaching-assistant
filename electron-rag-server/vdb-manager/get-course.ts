@@ -1,10 +1,11 @@
 import type { Course } from "./course.js";
+import { CourseRepository } from "./course-repository.js";
 
-/**
- * Retrieves one course by its unique course_id.
- */
+/** Retrieves one stored course by UUID. */
 export class GetCourse {
-  public async execute(_courseId: string): Promise<Course | null> {
-    throw new Error("GetCourse is not implemented.");
+  public constructor(private readonly repository: CourseRepository) {}
+
+  public async execute(courseId: string): Promise<Course | null> {
+    return this.repository.get(courseId);
   }
 }

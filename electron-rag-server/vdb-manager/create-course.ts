@@ -21,10 +21,7 @@ export interface CoursePipelineResult {
 
 export interface CoursePipelineDependencies {
   identityFactory: Pick<CourseIdentityFactory, "createIdentity">;
-  pdfParser: Pick<
-    PdfJsDocumentParser,
-    "parseWithMetrics" | "toExtractedPdfData"
-  >;
+  pdfParser: Pick<PdfJsDocumentParser, "parseWithMetrics" | "toExtractedPdfData">;
   validator: Pick<ValidatorService, "validate">;
   extractor: {
     extractParsedDocument: (document: Awaited<
@@ -54,30 +51,23 @@ export class CourseCreationStageError extends Error {
   }
 }
 
-/**
- * Orchestrates the document-processing pipeline for a new course.
- *
- * This class intentionally stops after producing validated material, chunks,
- * and vectors. Persistence to the two LanceDB tables is the next stage and is
- * not performed here yet.
- */
+/** Runs validation, hierarchy extraction, chunking and embedding for one PDF. */
 export class CreateCourse {
   private tokenizerPromise?: Promise<Pick<BgeM3Tokenizer, "countTokens">>;
   private embedderPromise?: Promise<Pick<EmbeddingService, "embedTexts">>;
 
-  public constructor(
-    private readonly dependencies: CoursePipelineDependencies,
-  ) {}
+  public constructor(private readonly dependencies: CoursePipelineDependencies) {}
 
   public async execute(
     request: CreateCourseRequest,
+    existingCourseId?: string,
   ): Promise<CoursePipelineResult> {
     let identity: CourseIdentity;
-
     try {
       identity = await this.dependencies.identityFactory.createIdentity(
         request.document_name,
         request.document_bytes,
+        existingCourseId,
       );
     } catch (error) {
       throw new CourseCreationStageError(
@@ -87,24 +77,14 @@ export class CreateCourse {
       );
     }
 
-    let parsedDocument: Awaited<
-      ReturnType<PdfJsDocumentParser["parse"]>
-    >;
+    let parsedDocument: Awaited<ReturnType<PdfJsDocumentParser["parse"]>>;
     let extractedPdfData: ReturnType<PdfJsDocumentParser["toExtractedPdfData"]>;
-
     try {
-      const parsed = await this.dependencies.pdfParser.parseWithMetrics(
-        request.document_bytes,
-      );
+      const parsed = await this.dependencies.pdfParser.parseWithMetrics(request.document_bytes);
       parsedDocument = parsed.document;
-      extractedPdfData =
-        this.dependencies.pdfParser.toExtractedPdfData(parsedDocument);
+      extractedPdfData = this.dependencies.pdfParser.toExtractedPdfData(parsedDocument);
     } catch (error) {
-      throw new CourseCreationStageError(
-        "pdf_parsing",
-        "The uploaded file could not be parsed as a PDF.",
-        error,
-      );
+      throw new CourseCreationStageError("pdf_parsing", "The uploaded file could not be parsed as a PDF.", error);
     }
 
     const validation = this.dependencies.validator.validate(extractedPdfData);
@@ -112,25 +92,16 @@ export class CreateCourse {
       throw new CourseCreationStageError(
         "validation",
         "The PDF was rejected by the existing validation pipeline.",
-        {
-          configuration_valid: validation.configuration_valid,
-          issues: validation.issues,
-        },
+        { configuration_valid: validation.configuration_valid, issues: validation.issues },
       );
     }
 
     let material: ExtractionResult;
     try {
-      material =
-        this.dependencies.extractor.extractParsedDocument(parsedDocument);
+      material = this.dependencies.extractor.extractParsedDocument(parsedDocument);
     } catch (error) {
-      throw new CourseCreationStageError(
-        "extraction",
-        "Document hierarchy extraction failed.",
-        error,
-      );
+      throw new CourseCreationStageError("extraction", "Document hierarchy extraction failed.", error);
     }
-
     if (!material.is_successful) {
       throw new CourseCreationStageError(
         "extraction",
@@ -143,30 +114,17 @@ export class CreateCourse {
     try {
       tokenizer = await this.getTokenizer();
     } catch (error) {
-      throw new CourseCreationStageError(
-        "chunking",
-        "The BGE-M3 tokenizer could not be loaded.",
-        error,
-      );
+      throw new CourseCreationStageError("chunking", "The BGE-M3 tokenizer could not be loaded.", error);
     }
 
     const chunking = new ChunkerService(
       this.dependencies.config,
       (text) => tokenizer.countTokens(text),
     ).chunkDocument(material);
-
-    if (!chunking.is_successful) {
+    if (!chunking.is_successful || chunking.chunks.length === 0) {
       throw new CourseCreationStageError(
         "chunking",
-        chunking.error || "Document chunking failed.",
-        chunking,
-      );
-    }
-
-    if (chunking.chunks.length === 0) {
-      throw new CourseCreationStageError(
-        "chunking",
-        "The extracted document produced no searchable chunks.",
+        chunking.error || "The extracted document produced no searchable chunks.",
         chunking,
       );
     }
@@ -175,11 +133,7 @@ export class CreateCourse {
     try {
       embeddingService = await this.getEmbedder();
     } catch (error) {
-      throw new CourseCreationStageError(
-        "embedding",
-        "The BGE-M3 embedding model could not be loaded.",
-        error,
-      );
+      throw new CourseCreationStageError("embedding", "The BGE-M3 embedding model could not be loaded.", error);
     }
 
     let embeddings: EmbeddingResult;
@@ -188,32 +142,20 @@ export class CreateCourse {
         chunking.chunks.map((chunk) => chunk.embedding_text),
       );
     } catch (error) {
-      throw new CourseCreationStageError(
-        "embedding",
-        "Generating document embeddings failed.",
-        error,
-      );
-    }
-
-    if (embeddings.embeddings.length !== chunking.chunks.length) {
-      throw new CourseCreationStageError(
-        "embedding",
-        `Embedding count mismatch: received ${embeddings.embeddings.length} vectors for ${chunking.chunks.length} chunks.`,
-        embeddings,
-      );
+      throw new CourseCreationStageError("embedding", "Generating document embeddings failed.", error);
     }
 
     if (
+      embeddings.embeddings.length !== chunking.chunks.length ||
       embeddings.dimensions !== 1024 ||
       embeddings.embeddings.some(
-        (vector) =>
-          vector.length !== embeddings.dimensions ||
+        (vector) => vector.length !== embeddings.dimensions ||
           vector.some((value) => !Number.isFinite(value)),
       )
     ) {
       throw new CourseCreationStageError(
         "embedding",
-        "The embedding model returned vectors with invalid dimensions or values.",
+        "The embedding model returned an unexpected vector count, dimensions, or non-finite values.",
         embeddings,
       );
     }
@@ -233,9 +175,7 @@ export class CreateCourse {
       const pending = this.dependencies.loadTokenizer();
       this.tokenizerPromise = pending;
       void pending.catch(() => {
-        if (this.tokenizerPromise === pending) {
-          this.tokenizerPromise = undefined;
-        }
+        if (this.tokenizerPromise === pending) this.tokenizerPromise = undefined;
       });
     }
     return this.tokenizerPromise;
@@ -246,9 +186,7 @@ export class CreateCourse {
       const pending = this.dependencies.loadEmbedder();
       this.embedderPromise = pending;
       void pending.catch(() => {
-        if (this.embedderPromise === pending) {
-          this.embedderPromise = undefined;
-        }
+        if (this.embedderPromise === pending) this.embedderPromise = undefined;
       });
     }
     return this.embedderPromise;

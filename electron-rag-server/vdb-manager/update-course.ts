@@ -1,14 +1,21 @@
-import type { ExtractionResult } from "../extractor/extractor-service.js";
+import type { CreateCourseRequest } from "./course.js";
+import type { CoursePipelineResult } from "./create-course.js";
+import { CreateCourse } from "./create-course.js";
+import { CourseRepository } from "./course-repository.js";
 
-/**
- * Replaces the entire extracted material for an existing course.
- * This is a full replacement operation, not a partial update or merge.
- */
+/** Reprocesses a replacement PDF and switches the course to its new chunk generation. */
 export class UpdateCourse {
+  public constructor(
+    private readonly pipeline: CreateCourse,
+    private readonly repository: CourseRepository,
+  ) {}
+
   public async execute(
-    _courseId: string,
-    _replacementMaterial: ExtractionResult,
-  ): Promise<void> {
-    throw new Error("UpdateCourse is not implemented.");
+    courseId: string,
+    replacement: CreateCourseRequest,
+  ): Promise<CoursePipelineResult> {
+    const result = await this.pipeline.execute(replacement, courseId);
+    await this.repository.replace(courseId, result);
+    return result;
   }
 }

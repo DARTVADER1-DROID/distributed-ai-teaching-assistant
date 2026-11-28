@@ -6,10 +6,11 @@
   "description": "Electron-based RAG server",
   "scripts": {
     "dev": "tsx watch main.ts",
-    "build": "tsc -p tsconfig.json && npm run test:schema && npm run test:duplicates && npm run test:pipeline",
+    "build": "tsc -p tsconfig.json && npm run test:schema && npm run test:duplicates && npm run test:pipeline && npm run test:repository",
     "test:schema": "tsx vdb-manager/course-table-schema.test.ts",
     "test:duplicates": "tsx vdb-manager/course-duplicate-checker.test.ts",
     "test:pipeline": "tsx vdb-manager/create-course.test.ts",
+    "test:repository": "tsx vdb-manager/course-repository.test.ts",
     "start": "node dist/main.js"
   },
   "dependencies": {

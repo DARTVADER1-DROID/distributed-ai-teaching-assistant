@@ -1,8 +1,10 @@
-/**
- * Deletes one course by its unique course_id.
- */
+import { CourseRepository } from "./course-repository.js";
+
+/** Deletes one course and all of its chunk generations. */
 export class DeleteCourse {
-  public async execute(_courseId: string): Promise<void> {
-    throw new Error("DeleteCourse is not implemented.");
+  public constructor(private readonly repository: CourseRepository) {}
+
+  public async execute(courseId: string): Promise<boolean> {
+    return this.repository.delete(courseId);
   }
 }

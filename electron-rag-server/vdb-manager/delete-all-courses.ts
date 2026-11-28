@@ -1,8 +1,10 @@
-/**
- * Deletes every stored course.
- */
+import { CourseRepository } from "./course-repository.js";
+
+/** Deletes all course catalogue rows and all associated chunks. */
 export class DeleteAllCourses {
+  public constructor(private readonly repository: CourseRepository) {}
+
   public async execute(): Promise<void> {
-    throw new Error("DeleteAllCourses is not implemented.");
+    await this.repository.deleteAll();
   }
 }

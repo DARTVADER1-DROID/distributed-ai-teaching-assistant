@@ -6,13 +6,7 @@ import {
   normalizeDocumentName,
 } from "./document-fingerprint.js";
 
-/**
- * Prepares identity metadata for a new upload:
- * normalize filename -> fingerprint bytes -> reject duplicates -> assign UUID.
- *
- * It deliberately does not persist a course. CreateCourse will call this
- * factory before running the document-processing pipeline and storing results.
- */
+/** Creates stable course identity metadata after duplicate validation. */
 export class CourseIdentityFactory {
   public constructor(
     private readonly duplicateChecker: CourseDuplicateChecker,
@@ -22,6 +16,7 @@ export class CourseIdentityFactory {
   public async createIdentity(
     documentName: string,
     documentBytes: Uint8Array,
+    existingCourseId?: string,
   ): Promise<CourseIdentity> {
     const normalizedName = normalizeDocumentName(documentName);
     const documentHash = calculateDocumentHash(documentBytes);
@@ -29,10 +24,11 @@ export class CourseIdentityFactory {
     await this.duplicateChecker.assertUnique(
       normalizedName.displayName,
       documentHash,
+      existingCourseId,
     );
 
     return {
-      course_id: this.idGenerator.generate(),
+      course_id: existingCourseId ?? this.idGenerator.generate(),
       document_name: normalizedName.displayName,
       document_name_key: normalizedName.key,
       document_hash: documentHash,
