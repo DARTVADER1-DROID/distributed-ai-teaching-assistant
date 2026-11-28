@@ -171,14 +171,14 @@ export class CourseRepository {
     }
     if (activeCourses.length === 0) return [];
 
-    const activePredicate = activeCourses.map((record) =>
+    if (!modelId.trim()) throw new Error("Search embedding model ID must be non-empty.");\n\n    const activePredicate = activeCourses.map((record) =>
       `(course_id = ${sqlString(record.course_id)} AND generation_id = ${sqlString(record.active_generation_id)})`,
     ).join(" OR ");
 
     const rows = await this.chunks
       .vectorSearch(vector)
       .distanceType("cosine")
-      .where(activePredicate)
+      .where(searchPredicate)
       .select([
         "chunk_id", "course_id", "generation_id", "chunk_index", "content",
         "heading_path_json", "token_count", "start_page_number",
