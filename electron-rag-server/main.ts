@@ -405,7 +405,7 @@ export function createApp(vdbManager: VdbManagerService): express.Express {
   app.get("/api/courses/:courseId", async (request, response, next) => {
     try {
       const courseId = request.params.courseId;
-      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(courseId)) {
+      if (typeof courseId !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(courseId)) {
         response.status(400).json({ error: "Course ID must be a valid UUID." });
         return;
       }
@@ -422,7 +422,7 @@ export function createApp(vdbManager: VdbManagerService): express.Express {
   app.put("/api/courses/:courseId", upload.single("file"), async (request, response, next) => {
     try {
       const courseId = request.params.courseId;
-      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(courseId)) {
+      if (typeof courseId !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(courseId)) {
         response.status(400).json({ error: "Course ID must be a valid UUID." });
         return;
       }
@@ -435,7 +435,7 @@ export function createApp(vdbManager: VdbManagerService): express.Express {
   app.delete("/api/courses/:courseId", async (request, response, next) => {
     try {
       const courseId = request.params.courseId;
-      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(courseId)) {
+      if (typeof courseId !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(courseId)) {
         response.status(400).json({ error: "Course ID must be a valid UUID." });
         return;
       }
