@@ -18,6 +18,7 @@ import { CourseDuplicateError } from "./vdb-manager/course-duplicate-error.js";
 import { VdbManagerService } from "./vdb-manager/vdb-manager-service.js";
 import { CourseNotFoundError } from "./vdb-manager/course-repository.js";
 import { CourseUnchangedError } from "./vdb-manager/update-course.js";
+import { SearchInputError } from "./vdb-manager/search-courses.js";
 
 const port = Number(process.env.PORT ?? 3000);
 const upload = multer({
@@ -35,6 +36,7 @@ const openApiDocument = {
   tags: [
     { name: "Health", description: "Service availability." },
     { name: "Courses", description: "Create, retrieve, replace and delete PDF-backed courses and manage the stored course catalogue." },
+    { name: "Retrieval", description: "Semantic vector search over active course chunk generations." },
   ],
   components: {
     schemas: {
@@ -158,6 +160,36 @@ const openApiDocument = {
             description: "Service is ready.",
             content: { "application/json": { schema: { type: "object", properties: { status: { type: "string", const: "ok" } } } } },
           },
+        },
+      },
+    },
+    "/api/retrieval/search": {
+      post: {
+        tags: ["Retrieval"],
+        summary: "Search course content by semantic similarity",
+        description: "Embeds the query using the same BGE-M3 model used during ingestion and performs cosine vector search over active chunk generations. Optionally restricts results to one course.",
+        operationId: "searchCourseContent",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["query"],
+                properties: {
+                  query: { type: "string", minLength: 1, maxLength: 8000 },
+                  course_id: { type: "string", format: "uuid" },
+                  top_k: { type: "integer", minimum: 1, maximum: 50, default: 5 },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": { description: "Ranked matching chunks with source locations and cosine distance." },
+          "400": { description: "Invalid query, course ID or top_k." },
+          "404": { description: "The requested course does not exist." },
+          "500": { description: "Embedding or vector database search failed." },
         },
       },
     },
@@ -312,6 +344,31 @@ export function createApp(vdbManager: VdbManagerService): express.Express {
     } catch (error) { next(error); }
   });
 
+  app.post("/api/retrieval/search", async (request, response, next) => {
+    try {
+      const body = request.body as {
+        query?: unknown;
+        course_id?: unknown;
+        top_k?: unknown;
+      };
+      if (typeof body?.query !== "string" || body.query.trim().length === 0) {
+        throw new HttpInputError("Provide a non-empty 'query' string.");
+      }
+      if (body.course_id !== undefined && typeof body.course_id !== "string") {
+        throw new HttpInputError("'course_id' must be a UUID string.");
+      }
+      if (body.top_k !== undefined && typeof body.top_k !== "number") {
+        throw new HttpInputError("'top_k' must be an integer between 1 and 50.");
+      }
+
+      const result = await vdbManager.searchCourses(body.query, {
+        ...(body.course_id === undefined ? {} : { course_id: body.course_id as string }),
+        ...(body.top_k === undefined ? {} : { top_k: body.top_k as number }),
+      });
+      response.status(200).json(result);
+    } catch (error) { next(error); }
+  });
+
   app.get("/api/courses", async (_request, response, next) => {
     try { response.status(200).json(await vdbManager.getAllCourses()); }
     catch (error) { next(error); }
@@ -377,7 +434,7 @@ export function createApp(vdbManager: VdbManagerService): express.Express {
       response.status(413).json({ error: "PDF exceeds the 25 MB upload limit." });
       return;
     }
-    if (error instanceof CourseNotFoundError) {
+    if (error instanceof SearchInputError) {\n      response.status(400).json({ error: error.message });\n      return;\n    }\n    if (error instanceof CourseNotFoundError) {
       response.status(404).json({ error: error.message });
       return;
     }
@@ -419,6 +476,19 @@ async function main(): Promise<void> {
   const identityFactory = new CourseIdentityFactory(new CourseDuplicateChecker(tables.courses));
   const pdfParser = new PdfJsDocumentParser(config);
 
+  // One lazy BGE-M3 instance is shared by ingestion and query embedding.
+  let embeddingServicePromise: Promise<EmbeddingService> | undefined;
+  const getEmbeddingService = (): Promise<EmbeddingService> => {
+    if (!embeddingServicePromise) {
+      const pending = EmbeddingService.load();
+      embeddingServicePromise = pending;
+      void pending.catch(() => {
+        if (embeddingServicePromise === pending) embeddingServicePromise = undefined;
+      });
+    }
+    return embeddingServicePromise;
+  };
+
   const pipeline = new CreateCourse({
     identityFactory,
     pdfParser,
@@ -426,10 +496,10 @@ async function main(): Promise<void> {
     extractor: new ExtractorService(pdfParser, config),
     config,
     loadTokenizer: () => BgeM3Tokenizer.load(),
-    loadEmbedder: () => EmbeddingService.load(),
+    loadEmbedder: getEmbeddingService,
   });
 
-  const vdbManager = new VdbManagerService(pipeline, repository);
+  const vdbManager = new VdbManagerService(pipeline, repository, {\n    embedTexts: async (texts) => (await getEmbeddingService()).embedTexts(texts),\n  });
   const app = createApp(vdbManager);
 
   const server = app.listen(port, () => {
