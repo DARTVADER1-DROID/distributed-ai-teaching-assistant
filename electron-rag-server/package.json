@@ -14,7 +14,8 @@
     "start": "node dist/main.js",
     "test:api": "tsx api-routes.test.ts",
     "test:pdf": "tsx pdf/pdfjs-document-parser.test.ts",
-    "test": "npm run test:schema && npm run test:duplicates && npm run test:pipeline && npm run test:pdf && npm run test:repository && npm run test:api"
+    "test": "npm run test:config && npm run test:schema && npm run test:duplicates && npm run test:pipeline && npm run test:pdf && npm run test:repository && npm run test:api",
+    "test:config": "tsx config/config.test.ts"
   },
   "dependencies": {
     "@huggingface/transformers": "4.3.2",
