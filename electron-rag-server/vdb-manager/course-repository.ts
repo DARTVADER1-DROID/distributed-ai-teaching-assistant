@@ -132,13 +132,14 @@ export class CourseRepository {
   }
 
   /**
-   * Performs cosine vector search over active generations only. The catalogue
-   * is consulted first so superseded or orphaned chunk generations are never
-   * exposed as current course content.
+   * Performs cosine vector search over active generations and the matching
+   * embedding model only. The catalogue is consulted first so superseded or
+   * orphaned chunk generations are never exposed as current course content.
    */
   public async search(
     vector: number[],
     topK: number,
+    modelId: string,
     courseId?: string,
   ): Promise<Array<{
     chunk_id: string;
@@ -160,6 +161,9 @@ export class CourseRepository {
     if (!Number.isSafeInteger(topK) || topK < 1 || topK > 50) {
       throw new Error("Search topK must be an integer between 1 and 50.");
     }
+    if (!modelId.trim()) {
+      throw new Error("Search embedding model ID must be non-empty.");
+    }
 
     let activeCourses: CourseRecord[];
     if (courseId) {
@@ -171,9 +175,10 @@ export class CourseRepository {
     }
     if (activeCourses.length === 0) return [];
 
-    if (!modelId.trim()) throw new Error("Search embedding model ID must be non-empty.");\n\n    const activePredicate = activeCourses.map((record) =>
+    const activePredicate = activeCourses.map((record) =>
       `(course_id = ${sqlString(record.course_id)} AND generation_id = ${sqlString(record.active_generation_id)})`,
     ).join(" OR ");
+    const searchPredicate = `(${activePredicate}) AND embedding_model_id = ${sqlString(modelId)}`;
 
     const rows = await this.chunks
       .vectorSearch(vector)
