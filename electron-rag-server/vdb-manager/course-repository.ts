@@ -122,19 +122,26 @@ export class CourseRepository {
 
   public async delete(courseId: string): Promise<boolean> {
     const existing = await this.findRecord(courseId);
-    if (!existing) return false;
 
+    // Remove the catalogue entry first so a chunk-delete failure cannot leave
+    // a visible course that no longer has searchable vectors. Retrying a
+    // missing course still cleans up any orphaned chunks from a prior failure.
+    if (existing) {
+      await this.courses.delete(coursePredicate(courseId));
+    }
     await this.chunks.delete(coursePredicate(courseId));
-    await this.courses.delete(coursePredicate(courseId));
-    return true;
+
+    return existing !== null;
   }
 
   public async deleteAll(): Promise<number> {
     const existingCourses = await this.courses.query().toArray();
     const deletedCount = existingCourses.length;
 
-    await this.chunks.delete("course_id IS NOT NULL");
+    // Clear the catalogue first. If chunk cleanup fails, a retry can safely
+    // finish removing orphaned vectors without exposing incomplete courses.
     await this.courses.delete("course_id IS NOT NULL");
+    await this.chunks.delete("course_id IS NOT NULL");
 
     return deletedCount;
   }
