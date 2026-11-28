@@ -27,16 +27,19 @@ START-WINDOWS.bat
 ```
 
 The launcher runs `scripts/setup-and-run-windows.ps1`. It checks the supported
-Node.js runtime, npm dependency installation, Python/Hugging Face CLI download
-tooling, and every required BGE-M3 file. If something is missing, it installs
-the required tooling (using Windows Package Manager where needed), generates
+Node.js runtime, npm dependency installation, and every required BGE-M3 file.
+Python and the Hugging Face CLI are installed only if a model download is
+actually needed. If something is missing, it installs the required tooling
+(using Windows Package Manager where needed), generates
 the npm lockfile if this is the first run, installs npm dependencies, or
 downloads the pinned model snapshot into the configured model directories.
 It then runs the TypeScript build and full test suite, and starts the server.
 
 On subsequent launches it reuses a healthy `node_modules` installation and
-complete model folders. The Hugging Face download is only run for a model
-directory with missing or empty required files. The model download is about
+complete model folders. It checks minimum expected sizes for the large
+tokenizer and ONNX files to catch incomplete downloads. The Hugging Face
+download is only run for a model directory with missing, empty or undersized
+required files. The model download is about
 2.27 GB for the ONNX external data file, so the first run needs a reliable
 internet connection and sufficient free disk space.
 
