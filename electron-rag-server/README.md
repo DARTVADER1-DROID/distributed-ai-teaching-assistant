@@ -4,6 +4,10 @@ A local Node.js/TypeScript RAG backend for PDF course ingestion, hierarchical
 extraction, chunking, dense BGE-M3 embeddings, LanceDB persistence and semantic
 retrieval. It exposes a REST API and Swagger UI for local development.
 
+## PDF validation contract
+
+See [VALIDATOR-GUIDE.md](./VALIDATOR-GUIDE.md) for the exact PDF authoring rules enforced by the ingestion validator, including configured font sizes and tolerances, heading recognition, level-specific closure markers, hierarchy transitions, page-boundary behavior, and common validation errors.
+
 ## Runtime requirements
 
 - Node.js **22.13.x or 24.0.0+** (the supported runtime ranges for the pinned PDF.js release).
