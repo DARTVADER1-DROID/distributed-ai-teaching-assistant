@@ -67,23 +67,26 @@ export class CourseRepository {
     const chunkRows = this.toChunkRecords(result, generationId);
     await this.chunks.add(chunkRows);
 
-    try {
-      const updated = await this.courses.update({
-        where: coursePredicate(courseId),
-        values: {
-          document_name: sqlString(result.identity.document_name),
-          document_name_key: sqlString(result.identity.document_name_key),
-          document_hash: sqlString(result.identity.document_hash),
-          material_json: sqlString(serializeCourseMaterial(result.material)),
-          active_generation_id: sqlString(generationId),
-          updated_at: sqlString(new Date().toISOString()),
-        },
-      });
+    const updatedRecord: CourseRecord = {
+      ...existing,
+      document_name: result.identity.document_name,
+      document_name_key: result.identity.document_name_key,
+      document_hash: result.identity.document_hash,
+      material_json: serializeCourseMaterial(result.material),
+      active_generation_id: generationId,
+      updated_at: new Date().toISOString(),
+    };
 
-      if (updated.rowsUpdated === 0) {
-        throw new CourseNotFoundError(courseId);
-      }
+    try {
+      // LanceDB's update expression API treats string values as SQL expressions.
+      // Replacing the catalogue row via delete/add preserves JSON strings verbatim.
+      await this.courses.delete(coursePredicate(courseId));
+      await this.courses.add([updatedRecord]);
     } catch (error) {
+      const remaining = await this.findRecord(courseId);
+      if (!remaining) {
+        await this.courses.add([existing]);
+      }
       await this.chunks.delete(
         `${coursePredicate(courseId)} AND generation_id = ${sqlString(generationId)}`,
       );
