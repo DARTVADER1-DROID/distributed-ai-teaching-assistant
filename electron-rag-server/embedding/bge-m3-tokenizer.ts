@@ -20,6 +20,7 @@ export class BgeM3Tokenizer {
     const modelPath = config.getTokenizerModelPath();
     try {
       const tokenizer = await AutoTokenizer.from_pretrained(modelPath, {
+        revision: config.tokenizer_model_revision,
         local_files_only: true,
       });
       return new BgeM3Tokenizer(tokenizer);
