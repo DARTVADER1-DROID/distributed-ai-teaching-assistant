@@ -21,6 +21,7 @@ type TeachingProgress struct {
 	Topic           models.Topic
 	TopicID         string
 	Progress        float64
+	CourseCompleted bool
 	Completed       bool
 	CompletedTopics int
 	TotalTopics     int
@@ -44,10 +45,11 @@ func (s *DataService) AddCourse(course models.Course) (models.Course, error) {
 		return models.Course{}, err
 	}
 
-	course.ID, err = generateID("course")
+	courseID, err := generateID("course")
 	if err != nil {
 		return models.Course{}, err
 	}
+	course.ID = courseID
 	if err := assignTopicIDs(&course); err != nil {
 		return models.Course{}, err
 	}
@@ -141,21 +143,32 @@ func (s *DataService) CompleteCurrent() (TeachingProgress, error) {
 	s.completedTopicIDs[currentTopic.ID] = true
 	s.currentTopicIndex++
 
-	if s.currentTopicIndex >= len(course.Topics) {
+	courseCompleted := s.currentTopicIndex >= len(course.Topics)
+	if courseCompleted {
 		s.currentCourseIndex++
 		s.currentTopicIndex = 0
 	}
 
 	if s.currentCourseIndex >= len(s.courses) {
-		return s.completedProgress(), nil
+		progress := s.completedProgress()
+		progress.CourseCompleted = courseCompleted
+		return progress, nil
 	}
 
 	nextCourse := s.courses[s.currentCourseIndex]
-	return s.progressFor(nextCourse, nextCourse.Topics[s.currentTopicIndex]), nil
+	progress := s.progressFor(nextCourse, nextCourse.Topics[s.currentTopicIndex])
+	progress.CourseCompleted = courseCompleted
+	return progress, nil
 }
 
 func (s *DataService) progressFor(course models.Course, topic models.Topic) TeachingProgress {
-	completed, total := s.topicCounts()
+	completed := 0
+	total := len(course.Topics)
+	for _, courseTopic := range course.Topics {
+		if s.completedTopicIDs[courseTopic.ID] {
+			completed++
+		}
+	}
 	progress := 0.0
 	if total > 0 {
 		progress = float64(completed) / float64(total) * 100
