@@ -86,6 +86,11 @@ async function runCourseRepositoryTest(): Promise<void> {
     const created = await repository.get(id);
     assert.ok(created);
     assert.equal(created.document_name, "first.pdf");
+    assert.equal(created.document_hash, initial.identity.document_hash);
+    assert.match(created.active_generation_id, /^[0-9a-f-]{36}$/i);
+    assert.ok(Number.isFinite(Date.parse(created.created_at)));
+    assert.equal(created.updated_at, created.created_at);
+    assert.deepEqual(created.material, initial.material);
     assert.equal((await repository.getAll()).length, 1);
     assert.equal((await tables.courseChunks.query().where(`course_id = '${id}'`).toArray()).length, 1);
 
@@ -116,6 +121,10 @@ async function runCourseRepositoryTest(): Promise<void> {
     const replaced = await repository.get(id);
     assert.ok(replaced);
     assert.equal(replaced.document_name, "second.pdf");
+    assert.notEqual(replaced.active_generation_id, created.active_generation_id);
+    assert.equal(replaced.created_at, created.created_at);
+    assert.ok(Date.parse(replaced.updated_at) >= Date.parse(created.updated_at));
+    assert.deepEqual(replaced.material, initial.material);
     const activeRows = await tables.courseChunks
       .query()
       .where(`course_id = '${id}'`)
