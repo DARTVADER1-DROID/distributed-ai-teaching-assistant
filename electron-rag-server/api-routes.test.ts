@@ -10,6 +10,8 @@ async function runApiRouteTests(): Promise<void> {
   let deleteResult = true;
   let deleteAllResult = 3;
   let updateMode: "success" | "missing" | "unchanged" = "success";
+  let getMode: "success" | "missing" | "corrupt" = "success";
+  let getCalls = 0;
   let deleteCalls = 0;
   let deleteAllCalls = 0;
   let updateCalls = 0;
@@ -32,7 +34,21 @@ async function runApiRouteTests(): Promise<void> {
         },
       };
     },
-    async getCourse() { return null; },
+    async getCourse(id: string) {
+      getCalls += 1;
+      assert.equal(id, courseId);
+      if (getMode === "missing") return null;
+      if (getMode === "corrupt") throw new Error("Stored material for course is invalid.");
+      return {
+        course_id: id,
+        document_name: "lecture.pdf",
+        document_hash: "a".repeat(64),
+        active_generation_id: "9a1a3a84-3fd7-4d75-a75d-6adca39b7f8d",
+        created_at: "2026-11-28T00:00:00.000Z",
+        updated_at: "2026-11-28T00:00:00.000Z",
+        material: { is_successful: true, error: "", document: { type: "Document", children: [] } },
+      };
+    },
     async getAllCourses() { return []; },
     async deleteCourse(id: string) {
       deleteCalls += 1;
@@ -52,7 +68,33 @@ async function runApiRouteTests(): Promise<void> {
     const address = server.address() as AddressInfo;
     const baseUrl = `http://127.0.0.1:${address.port}`;
 
-    const invalidUpdate = await fetch(`${baseUrl}/api/courses/not-a-uuid`, {
+    const invalidGet = await fetch(`${baseUrl}/api/courses/not-a-uuid`);
+    assert.equal(invalidGet.status, 400);
+    assert.equal(getCalls, 0);
+
+    const retrieved = await fetch(`${baseUrl}/api/courses/${courseId}`);
+    assert.equal(retrieved.status, 200);
+    const retrievedPayload = await retrieved.json() as {
+      course_id: string; document_name: string; document_hash: string;
+      active_generation_id: string; created_at: string; updated_at: string;
+      material: { is_successful: boolean; document: { type: string } };
+    };
+    assert.equal(retrievedPayload.course_id, courseId);
+    assert.equal(retrievedPayload.document_name, "lecture.pdf");
+    assert.equal(retrievedPayload.document_hash, "a".repeat(64));
+    assert.equal(retrievedPayload.active_generation_id, "9a1a3a84-3fd7-4d75-a75d-6adca39b7f8d");
+    assert.equal(retrievedPayload.material.document.type, "Document");
+
+    getMode = "missing";
+    const missingGet = await fetch(`${baseUrl}/api/courses/${courseId}`);
+    assert.equal(missingGet.status, 404);
+
+    getMode = "corrupt";
+    const corruptGet = await fetch(`${baseUrl}/api/courses/${courseId}`);
+    assert.equal(corruptGet.status, 500);
+
+    getMode = "success";
+\n    const invalidUpdate = await fetch(`${baseUrl}/api/courses/not-a-uuid`, {
       method: "PUT",
       body: new FormData(),
     });
@@ -124,10 +166,11 @@ async function runApiRouteTests(): Promise<void> {
       paths: Record<string, Record<string, unknown>>;
     };
     assert.ok(openApi.paths["/api/courses"]?.delete);
+    assert.ok(openApi.paths["/api/courses/{courseId}"]?.get);
     assert.ok(openApi.paths["/api/courses/{courseId}"]?.put);
     assert.ok(openApi.paths["/api/courses/{courseId}"]?.delete);
 
-    console.log("API route tests passed: update, no-op, missing course, UUID validation, delete operations and OpenAPI paths.");
+    console.log("API route tests passed: single-course retrieval, update, no-op, missing course, UUID validation, delete operations and OpenAPI paths.");
   } finally {
     await new Promise<void>((resolve, reject) => {
       server.close((error) => error ? reject(error) : resolve());
