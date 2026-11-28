@@ -6,7 +6,7 @@ async function main(): Promise<void> {
   const defaults = new RagConfig();
   assert.equal(
     defaults.getTokenizerModelPath(),
-    resolve(process.cwd(), "models", "bge-m3-tokenizer"),
+    resolve(process.cwd(), "models", "bge-m3-onnx"),
   );
   assert.equal(
     defaults.getEmbeddingModelPath(),
