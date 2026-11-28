@@ -96,6 +96,20 @@ async function runApiRouteTests(): Promise<void> {
     });
     assert.equal(invalidSearch.status, 400);
 
+    const invalidSearchOptions = await fetch(`${baseUrl}/api/retrieval/search`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ query: "valid query", top_k: 0 }),
+    });
+    assert.equal(invalidSearchOptions.status, 400);
+
+    const invalidSearchCourse = await fetch(`${baseUrl}/api/retrieval/search`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ query: "valid query", course_id: "not-a-uuid" }),
+    });
+    assert.equal(invalidSearchCourse.status, 400);
+
     const semanticSearch = await fetch(`${baseUrl}/api/retrieval/search`, {
       method: "POST",
       headers: { "content-type": "application/json" },
