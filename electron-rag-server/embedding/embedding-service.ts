@@ -49,7 +49,7 @@ export class EmbeddingService {
       const featureExtractor = (await pipeline(
         "feature-extraction",
         modelPath,
-        { local_files_only: true },
+        { revision: config.embedding_model_revision, local_files_only: true },
       )) as unknown as FeatureExtractionRunner;
 
       return new EmbeddingService(
