@@ -34,7 +34,18 @@ operations will use that client rather than importing the SDK directly.
 | Show all courses | `get-all-courses.ts` | Return all stored courses. |
 | Delete all courses | `delete-all-courses.ts` | Remove all stored courses. |
 
-Course operation bodies remain intentionally unimplemented. The next step is
-to define and test the persisted chunk/vector record schema before wiring
-course CRUD to LanceDB. Embedding generation is not yet integrated into the
-pipeline, so no vectors are written by this change.
+Course operation bodies remain intentionally unimplemented. The persisted record contracts are defined in `storage-records.ts`:
+
+- `CourseRecord` stores the complete serialized `ExtractionResult`, the active
+  chunk-generation ID, and creation/update timestamps.
+- `CourseChunkRecord` stores one chunk, its dense vector, exact embedding input,
+  source text, heading path, token count, source page/line range, and embedding
+  model metadata. The heading path is JSON-encoded as a scalar column.
+- `serializeCourseMaterial` and `deserializeCourseMaterial` keep the boundary
+  between the domain extraction type and the persisted JSON representation
+  explicit.
+
+These are TypeScript contracts, not a verified physical LanceDB schema yet.
+Embedding generation is not integrated or runtime-verified, and no vectors
+are written by this change. The next step is to validate the record types
+against the installed LanceDB SDK and then implement table creation.
