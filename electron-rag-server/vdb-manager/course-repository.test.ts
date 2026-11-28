@@ -143,6 +143,12 @@ async function runCourseRepositoryTest(): Promise<void> {
       chunk_id: "stale-generation-test",
       generation_id: created.active_generation_id,
     }]);
+    await tables.courseChunks.add([{
+      ...activeChunk,
+      chunk_id: "different-embedding-model-test",
+      embedding_model_id: "incompatible-model",
+      vector: Array.from({ length: 1024 }, () => 0.125),
+    }]);
 
     const searchResults = await manager.searchCourses("find the second lecture", { course_id: id, top_k: 3 });
     assert.equal(searchResults.results.length, 1);
