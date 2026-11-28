@@ -1,3 +1,6 @@
 package models
 
-type Course struct{}
+type Course struct {
+	Name   string
+	Topics []Topic
+}
