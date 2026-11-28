@@ -72,11 +72,14 @@ const openApiDocument = {
       },
       Course: {
         type: "object",
-        required: ["course_id", "document_name", "document_hash", "material"],
+        required: ["course_id", "document_name", "document_hash", "active_generation_id", "created_at", "updated_at", "material"],
         properties: {
           course_id: { type: "string", format: "uuid" },
           document_name: { type: "string" },
           document_hash: { type: "string", pattern: "^[a-f0-9]{64}$" },
+          active_generation_id: { type: "string", format: "uuid" },
+          created_at: { type: "string", format: "date-time" },
+          updated_at: { type: "string", format: "date-time" },
           material: { $ref: "#/components/schemas/ExtractionResult" },
         },
       },
@@ -210,9 +213,21 @@ const openApiDocument = {
         name: "courseId",
         in: "path",
         required: true,
-        description: "UUID of the course to update or delete.",
+        description: "UUID of the course to retrieve, update or delete.",
         schema: { type: "string", format: "uuid" },
       }],
+      get: {
+        tags: ["Courses"],
+        summary: "Retrieve one course",
+        description: "Returns stored course metadata and parsed hierarchical extraction result. Does not return PDF bytes, chunks or embedding vectors, and does not initialize the embedding model.",
+        operationId: "getCourse",
+        responses: {
+          "200": { description: "Course metadata and hierarchical material.", content: { "application/json": { schema: { $ref: "#/components/schemas/Course" } } } },
+          "400": { description: "Course ID is not a valid UUID.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          "404": { description: "Course does not exist.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          "500": { description: "Stored course data is corrupted or the database is unavailable.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+        },
+      },
       put: {
         tags: ["Courses"],
         summary: "Replace an existing course using a new PDF",
@@ -300,6 +315,23 @@ export function createApp(vdbManager: VdbManagerService): express.Express {
   app.get("/api/courses", async (_request, response, next) => {
     try { response.status(200).json(await vdbManager.getAllCourses()); }
     catch (error) { next(error); }
+  });
+
+  app.get("/api/courses/:courseId", async (request, response, next) => {
+    try {
+      const courseId = request.params.courseId;
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(courseId)) {
+        response.status(400).json({ error: "Course ID must be a valid UUID." });
+        return;
+      }
+
+      const course = await vdbManager.getCourse(courseId);
+      if (!course) {
+        response.status(404).json({ error: "Course '" + courseId + "' was not found." });
+        return;
+      }
+      response.status(200).json(course);
+    } catch (error) { next(error); }
   });
 
   app.put("/api/courses/:courseId", upload.single("file"), async (request, response, next) => {
