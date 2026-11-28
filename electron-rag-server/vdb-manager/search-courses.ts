@@ -67,7 +67,7 @@ export class SearchCourses {
       throw new Error("Query embedding must contain exactly one finite 1024-dimensional vector.");
     }
 
-    const results = await this.repository.search(vector, topK, options.course_id);
+    const results = await this.repository.search(vector, topK, embedded.model_id, options.course_id);
     return {
       query: query.trim(),
       course_id: options.course_id ?? null,
