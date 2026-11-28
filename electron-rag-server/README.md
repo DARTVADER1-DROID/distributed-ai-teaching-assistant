@@ -6,8 +6,8 @@ retrieval. It exposes a REST API and Swagger UI for local development.
 
 ## Runtime requirements
 
-- Node.js **22.13.0 or newer** (required by the pinned PDF.js release).
-- npm 10 or newer is recommended.
+- Node.js **22.13.x or 24.0.0+** (the supported runtime ranges for the pinned PDF.js release).
+- npm 10 or newer is recommended. Node.js 23.x is intentionally excluded by PDF.js's declared engine range.
 - Windows, macOS or Linux.
 - The ONNX model files are downloaded separately and are not committed to Git.
 
