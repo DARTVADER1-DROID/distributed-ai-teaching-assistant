@@ -1,4 +1,5 @@
 import { pipeline } from "@huggingface/transformers";
+import { RagConfig } from "../config/config.js";
 
 export interface EmbeddingResult {
   model_id: string;
@@ -18,38 +19,50 @@ type FeatureExtractionRunner = (
 /**
  * Generates dense BGE-M3 vectors for embedding-ready text.
  *
- * This service is deliberately independent from BgeM3Tokenizer:
- * - BgeM3Tokenizer counts tokens for chunk-size enforcement.
- * - EmbeddingService runs the ONNX model and returns dense vectors.
- *
- * It does not persist vectors or modify chunks. Those responsibilities
- * belong to later pipeline stages.
+ * The tokenizer and ONNX model are loaded from local directories configured
+ * by RagConfig. This service never downloads model files during startup.
  */
 export class EmbeddingService {
-  public static readonly modelId = "onnx-community/bge-m3-ONNX";
   public static readonly dimensions = 1024;
   public static readonly modelMaxSequenceLength = 8192;
 
   private constructor(
     private readonly featureExtractor: FeatureExtractionRunner,
     private readonly batchSize: number,
+    private readonly modelId: string,
   ) {}
 
   /**
-   * Loads the Transformers.js-compatible ONNX export of BGE-M3.
-   * The returned instance keeps the model in memory for subsequent calls.
+   * Loads the Transformers.js-compatible ONNX export from the configured
+   * local model directory and keeps it in memory for subsequent calls.
    */
-  public static async load(batchSize = 8): Promise<EmbeddingService> {
+  public static async load(
+    config: RagConfig = new RagConfig(),
+    batchSize = 8,
+  ): Promise<EmbeddingService> {
     if (!Number.isSafeInteger(batchSize) || batchSize <= 0) {
       throw new Error("Embedding batch size must be a positive integer.");
     }
 
-    const featureExtractor = (await pipeline(
-      "feature-extraction",
-      EmbeddingService.modelId,
-    )) as unknown as FeatureExtractionRunner;
+    const modelPath = config.getEmbeddingModelPath();
+    try {
+      const featureExtractor = (await pipeline(
+        "feature-extraction",
+        modelPath,
+        { local_files_only: true },
+      )) as unknown as FeatureExtractionRunner;
 
-    return new EmbeddingService(featureExtractor, batchSize);
+      return new EmbeddingService(
+        featureExtractor,
+        batchSize,
+        config.embedding_model_id,
+      );
+    } catch (error) {
+      throw new Error(
+        `Unable to load the local BGE-M3 ONNX model from "${modelPath}". Download the ONNX model files using the revision configured in config/config.ts. Remote model downloads are disabled.`,
+        { cause: error },
+      );
+    }
   }
 
   /**
@@ -105,7 +118,7 @@ export class EmbeddingService {
     }
 
     return {
-      model_id: EmbeddingService.modelId,
+      model_id: this.modelId,
       dimensions: EmbeddingService.dimensions,
       embeddings,
     };
