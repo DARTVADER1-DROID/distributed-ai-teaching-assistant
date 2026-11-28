@@ -1,14 +1,11 @@
-import type { Course, CreateCourseRequest } from "./course.js";
+import type { Course } from "./course.js";
 
 /**
- * Creates a course from uploaded document bytes.
- * The caller supplies neither a course ID nor a content hash; identity is
- * prepared internally after duplicate checks pass.
- *
- * The PDF processing and persistence pipeline will be added in a later step.
+ * Creates a course only when its course_id does not already exist.
+ * A duplicate must raise CourseAlreadyExistsError; no overwrite is allowed.
  */
 export class CreateCourse {
-  public async execute(_request: CreateCourseRequest): Promise<Course> {
-    throw new Error("CreateCourse processing and persistence are not implemented yet.");
+  public async execute(_course: Course): Promise<void> {
+    throw new Error("CreateCourse is not implemented.");
   }
 }

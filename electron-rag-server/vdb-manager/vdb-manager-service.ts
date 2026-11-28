@@ -1,5 +1,5 @@
 import type { ExtractionResult } from "../extractor/extractor-service.js";
-import type { Course, CreateCourseRequest } from "./course.js";
+import type { Course } from "./course.js";
 import { CreateCourse } from "./create-course.js";
 import { UpdateCourse } from "./update-course.js";
 import { DeleteCourse } from "./delete-course.js";
@@ -7,7 +7,11 @@ import { GetCourse } from "./get-course.js";
 import { GetAllCourses } from "./get-all-courses.js";
 import { DeleteAllCourses } from "./delete-all-courses.js";
 
-/** Coordinates course operations for the vector database layer. */
+/**
+ * Coordinates course operations for the vector database layer.
+ * Operation implementations and the storage provider are intentionally
+ * deferred; this service currently exposes the planned API only.
+ */
 export class VdbManagerService {
   private readonly createCourseOperation = new CreateCourse();
   private readonly updateCourseOperation = new UpdateCourse();
@@ -16,9 +20,8 @@ export class VdbManagerService {
   private readonly getAllCoursesOperation = new GetAllCourses();
   private readonly deleteAllCoursesOperation = new DeleteAllCourses();
 
-  /** The upload request intentionally contains no caller-supplied course ID. */
-  public createCourse(request: CreateCourseRequest): Promise<Course> {
-    return this.createCourseOperation.execute(request);
+  public createCourse(course: Course): Promise<void> {
+    return this.createCourseOperation.execute(course);
   }
 
   /** Replaces all existing extracted material with replacementMaterial. */
