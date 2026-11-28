@@ -142,6 +142,9 @@ async function runCourseRepositoryTest(): Promise<void> {
       ...activeChunk,
       chunk_id: "stale-generation-test",
       generation_id: created.active_generation_id,
+      // Rebuild the vector as a plain numeric array; Arrow query rows expose
+      // vector values as Arrow objects that LanceDB cannot accept on reinsert.
+      vector: Array.from({ length: 1024 }, () => 0.125),
     }]);
     await tables.courseChunks.add([{
       ...activeChunk,
