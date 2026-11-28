@@ -49,6 +49,27 @@ async function runApiRouteTests(): Promise<void> {
         material: { is_successful: true, error: "", document: { type: "Document", children: [] } },
       };
     },
+    async searchCourses(query: string, options: { course_id?: string; top_k?: number }) {
+      return {
+        query,
+        course_id: options.course_id ?? null,
+        top_k: options.top_k ?? 5,
+        results: [{
+          chunk_id: "chunk-1",
+          course_id: options.course_id ?? courseId,
+          document_name: "lecture.pdf",
+          chunk_index: 0,
+          content: "Laplace transforms solve differential equations.",
+          heading_path: ["Laplace Transforms"],
+          token_count: 8,
+          start_page_number: 2,
+          start_line_number: 3,
+          end_page_number: 2,
+          end_line_number: 8,
+          distance: 0.12,
+        }],
+      };
+    },
     async getAllCourses() { return []; },
     async deleteCourse(id: string) {
       deleteCalls += 1;
@@ -67,6 +88,29 @@ async function runApiRouteTests(): Promise<void> {
     await new Promise<void>((resolve) => server.once("listening", resolve));
     const address = server.address() as AddressInfo;
     const baseUrl = `http://127.0.0.1:${address.port}`;
+
+    const invalidSearch = await fetch(`${baseUrl}/api/retrieval/search`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ query: "   " }),
+    });
+    assert.equal(invalidSearch.status, 400);
+
+    const semanticSearch = await fetch(`${baseUrl}/api/retrieval/search`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ query: "How do Laplace transforms work?", course_id: courseId, top_k: 3 }),
+    });
+    assert.equal(semanticSearch.status, 200);
+    const searchPayload = await semanticSearch.json() as {
+      query: string; course_id: string; top_k: number;
+      results: Array<{ content: string; heading_path: string[]; distance: number }>;
+    };
+    assert.equal(searchPayload.course_id, courseId);
+    assert.equal(searchPayload.top_k, 3);
+    assert.equal(searchPayload.results[0]?.content, "Laplace transforms solve differential equations.");
+    assert.deepEqual(searchPayload.results[0]?.heading_path, ["Laplace Transforms"]);
+    assert.equal(searchPayload.results[0]?.distance, 0.12);
 
     const invalidGet = await fetch(`${baseUrl}/api/courses/not-a-uuid`);
     assert.equal(invalidGet.status, 400);
@@ -94,7 +138,8 @@ async function runApiRouteTests(): Promise<void> {
     assert.equal(corruptGet.status, 500);
 
     getMode = "success";
-\n    const invalidUpdate = await fetch(`${baseUrl}/api/courses/not-a-uuid`, {
+
+    const invalidUpdate = await fetch(`${baseUrl}/api/courses/not-a-uuid`, {
       method: "PUT",
       body: new FormData(),
     });
@@ -165,12 +210,13 @@ async function runApiRouteTests(): Promise<void> {
     const openApi = await openApiResponse.json() as {
       paths: Record<string, Record<string, unknown>>;
     };
+    assert.ok(openApi.paths["/api/retrieval/search"]?.post);
     assert.ok(openApi.paths["/api/courses"]?.delete);
     assert.ok(openApi.paths["/api/courses/{courseId}"]?.get);
     assert.ok(openApi.paths["/api/courses/{courseId}"]?.put);
     assert.ok(openApi.paths["/api/courses/{courseId}"]?.delete);
 
-    console.log("API route tests passed: single-course retrieval, update, no-op, missing course, UUID validation, delete operations and OpenAPI paths.");
+    console.log("API route tests passed: semantic vector search, single-course retrieval, update, no-op, missing course, UUID validation, delete operations and OpenAPI paths.");
   } finally {
     await new Promise<void>((resolve, reject) => {
       server.close((error) => error ? reject(error) : resolve());
