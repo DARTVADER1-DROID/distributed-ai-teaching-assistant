@@ -12,8 +12,8 @@ import { GetAllCourses } from "./get-all-courses.js";
 import { DeleteAllCourses } from "./delete-all-courses.js";
 
 /**
- * Application entry point for course lifecycle operations.
- * Writes are serialized so duplicate detection and catalogue insertion cannot
+ * Application entry point for course lifecycle and semantic retrieval operations.
+ * Writes are serialized so duplicate detection and catalogue mutations cannot
  * race each other inside this server process.
  */
 export class VdbManagerService {
@@ -29,13 +29,15 @@ export class VdbManagerService {
   public constructor(
     pipeline: CreateCourse,
     private readonly repository: CourseRepository,
+    queryEmbedder: Pick<EmbeddingService, "embedTexts">,
   ) {
     this.createOperation = new CreateCourseOperation(pipeline, repository);
     this.updateOperation = new UpdateCourse(pipeline, repository);
     this.deleteOperation = new DeleteCourse(repository);
     this.getOperation = new GetCourse(repository);
     this.getAllOperation = new GetAllCourses(repository);
-    this.deleteAllOperation = new DeleteAllCourses(repository);\n    this.searchOperation = new SearchCourses(repository, queryEmbedder);
+    this.deleteAllOperation = new DeleteAllCourses(repository);
+    this.searchOperation = new SearchCourses(repository, queryEmbedder);
   }
 
   public createCourse(request: CreateCourseRequest): Promise<CoursePipelineResult> {
@@ -61,7 +63,11 @@ export class VdbManagerService {
     return this.getAllOperation.execute();
   }
 
-  public searchCourses(query: string, options: SearchCoursesOptions = {}) {\n    return this.searchOperation.execute(query, options);\n  }\n\n  public deleteAllCourses(): Promise<number> {
+  public searchCourses(query: string, options: SearchCoursesOptions = {}) {
+    return this.searchOperation.execute(query, options);
+  }
+
+  public deleteAllCourses(): Promise<number> {
     return this.serializeWrite(() => this.deleteAllOperation.execute());
   }
 
