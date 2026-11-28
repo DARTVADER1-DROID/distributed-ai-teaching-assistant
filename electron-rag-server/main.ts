@@ -213,6 +213,22 @@ const openApiDocument = {
         description: "UUID of the course to update or delete.",
         schema: { type: "string", format: "uuid" },
       }],
+      put: {
+        tags: ["Courses"],
+        summary: "Replace an existing course using a new PDF",
+        description: "Fully replaces the document, extracted material, metadata and vector generation while preserving the course ID. The existing course remains active unless the replacement pipeline succeeds. An identical filename and identical file content is rejected as a no-op.",
+        operationId: "updateCourse",
+        requestBody: { $ref: "#/components/requestBodies/PdfUpload" },
+        responses: {
+          "200": { description: "Course fully replaced and new vectors activated.", content: { "application/json": { schema: { $ref: "#/components/schemas/CourseProcessingResult" } } } },
+          "400": { description: "Missing PDF upload or malformed course ID.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          "404": { description: "Course does not exist.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          "409": { description: "Duplicate document or no-op update.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          "413": { description: "Upload exceeds 25 MB." },
+          "422": { description: "Replacement PDF failed validation, extraction, chunking or embedding.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          "500": { description: "Unexpected persistence error. A post-switch cleanup failure may mean the new generation is active but stale chunks still require cleanup.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+        },
+      },
       delete: {
         tags: ["Courses"],
         summary: "Delete one course",
