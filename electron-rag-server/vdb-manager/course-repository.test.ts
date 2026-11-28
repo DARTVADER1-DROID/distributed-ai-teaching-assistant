@@ -136,6 +136,13 @@ async function runCourseRepositoryTest(): Promise<void> {
       .toArray();
     assert.equal(activeRows.length, 1);
     assert.equal(activeRows[0]?.content, "body second");
+    const activeChunk = activeRows[0];
+    assert.ok(activeChunk);
+    await tables.courseChunks.add([{
+      ...activeChunk,
+      chunk_id: "stale-generation-test",
+      generation_id: created.active_generation_id,
+    }]);
 
     const searchResults = await manager.searchCourses("find the second lecture", { course_id: id, top_k: 3 });
     assert.equal(searchResults.results.length, 1);
