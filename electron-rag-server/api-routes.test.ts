@@ -29,6 +29,7 @@ async function runApiDeleteTests(): Promise<void> {
   const app = createApp(manager);
   const server = app.listen(0);
   try {
+    await new Promise<void>((resolve) => server.once("listening", resolve));
     const address = server.address() as AddressInfo;
     const baseUrl = `http://127.0.0.1:${address.port}`;
 
