@@ -1,7 +1,7 @@
 import type { ExtractionResult } from "../extractor/extractor-service.js";
 
 /** Persisted course catalogue row. */
-export interface CourseRecord {
+export interface CourseRecord extends Record<string, unknown> {
   course_id: string;
   /** Original uploaded filename, kept for display. */
   document_name: string;
@@ -17,7 +17,7 @@ export interface CourseRecord {
 }
 
 /** One searchable chunk and its corresponding dense vector. */
-export interface CourseChunkRecord {
+export interface CourseChunkRecord extends Record<string, unknown> {
   chunk_id: string;
   course_id: string;
   generation_id: string;

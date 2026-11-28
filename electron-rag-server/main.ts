@@ -254,7 +254,7 @@ function installRoutes(vdbManager: VdbManagerService): void {
 
   app.get("/api/courses/:courseId", async (request, response, next) => {
     try {
-      const course = await vdbManager.getCourse(request.params.courseId ?? "");
+      const course = await vdbManager.getCourse((Array.isArray(request.params.courseId) ? request.params.courseId[0] : request.params.courseId) ?? "");
       if (!course) { response.status(404).json({ error: "Course not found." }); return; }
       response.status(200).json(course);
     } catch (error) { next(error); }
@@ -263,7 +263,7 @@ function installRoutes(vdbManager: VdbManagerService): void {
   app.put("/api/courses/:courseId", upload.single("file"), async (request, response, next) => {
     try {
       const result = await vdbManager.updateCourse(
-        request.params.courseId ?? "",
+        (Array.isArray(request.params.courseId) ? request.params.courseId[0] : request.params.courseId) ?? "",
         uploadRequest(request),
       );
       response.status(200).json(processingResponse(result));
@@ -272,7 +272,7 @@ function installRoutes(vdbManager: VdbManagerService): void {
 
   app.delete("/api/courses/:courseId", async (request, response, next) => {
     try {
-      const deleted = await vdbManager.deleteCourse(request.params.courseId ?? "");
+      const deleted = await vdbManager.deleteCourse((Array.isArray(request.params.courseId) ? request.params.courseId[0] : request.params.courseId) ?? "");
       if (!deleted) { response.status(404).json({ error: "Course not found." }); return; }
       response.status(204).end();
     } catch (error) { next(error); }
