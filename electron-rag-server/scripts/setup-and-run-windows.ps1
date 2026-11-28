@@ -246,9 +246,32 @@ function Start-Server {
     Write-Step "Building and testing the software"
     Invoke-Checked "npm" @("run", "build") "Build or test suite failed. The server will not be started."
 
+    $port = if ($env:PORT) { $env:PORT } else { "3000" }
+    $healthUrl = "http://localhost:$port/health"
+    $docsUrl = "http://localhost:$port/docs"
+
+    try {
+        $healthResponse = Invoke-WebRequest -Uri $healthUrl -UseBasicParsing -TimeoutSec 3
+        if ($healthResponse.StatusCode -ge 200 -and $healthResponse.StatusCode -lt 300) {
+            Write-Host "A healthy server is already running at $healthUrl"
+            Start-Process $docsUrl
+            return
+        }
+    } catch {
+        # No healthy instance responded; check whether another process owns the port.
+    }
+
+    $portNumber = 0
+    if ([int]::TryParse($port, [ref]$portNumber)) {
+        $portInUse = (Test-NetConnection -ComputerName "localhost" -Port $portNumber -WarningAction SilentlyContinue).TcpTestSucceeded
+        if ($portInUse) {
+            throw "Port $portNumber is already in use, but the RAG health endpoint did not respond. Stop the other process or change PORT, then rerun."
+        }
+    }
+
     Write-Step "Starting Electron RAG server"
-    Write-Host "Swagger UI: http://localhost:3000/docs"
-    Write-Host "Health:     http://localhost:3000/health"
+    Write-Host "Swagger UI: $docsUrl"
+    Write-Host "Health:     $healthUrl"
     Write-Host "Press Ctrl+C in this window to stop the server."
     & npm start
     if ($LASTEXITCODE -ne 0) {
