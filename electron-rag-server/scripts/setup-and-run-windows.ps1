@@ -68,10 +68,13 @@ function Ensure-Node {
     if (-not (Test-SupportedNode $nodeVersion)) {
         Ensure-Winget
         Write-Host "Node.js $nodeVersion is outside the supported range. Installing/upgrading Node.js LTS..."
-        Invoke-Checked "winget" @(
-            "install", "--id", "OpenJS.NodeJS.LTS", "--exact",
-            "--silent", "--accept-package-agreements", "--accept-source-agreements"
-        ) "Node.js LTS installation/upgrade failed."
+        & winget upgrade --id OpenJS.NodeJS.LTS --exact --silent --accept-package-agreements --accept-source-agreements
+        if ($LASTEXITCODE -ne 0) {
+            Invoke-Checked "winget" @(
+                "install", "--id", "OpenJS.NodeJS.LTS", "--exact",
+                "--silent", "--accept-package-agreements", "--accept-source-agreements"
+            ) "Node.js LTS installation/upgrade failed."
+        }
         Refresh-Path
         $nodeVersion = (& node --version).Trim()
         if (-not (Test-SupportedNode $nodeVersion)) {
@@ -95,8 +98,13 @@ function Get-PythonLauncher {
 
 function Ensure-HuggingFaceCli {
     Write-Step "Checking Hugging Face download tooling"
-    $pythonLauncher = Get-PythonLauncher
 
+    if (Get-Command hf -ErrorAction SilentlyContinue) {
+        Write-Host "Hugging Face CLI: already available"
+        return
+    }
+
+    $pythonLauncher = Get-PythonLauncher
     if (-not $pythonLauncher) {
         Ensure-Winget
         Write-Host "Python is needed only to install the Hugging Face download CLI. Installing Python 3.12..."
@@ -114,21 +122,29 @@ function Ensure-HuggingFaceCli {
     }
 
     if ($pythonLauncher -eq "py") {
-        Invoke-Checked "py" @("-3", "-m", "pip", "install", "--user", "--upgrade", "huggingface_hub") "Could not install/update huggingface_hub."
         $scriptsDirectory = (& py -3 -c "import sysconfig; print(sysconfig.get_path('scripts', scheme='nt_user'))").Trim()
     } else {
-        Invoke-Checked "python" @("-m", "pip", "install", "--user", "--upgrade", "huggingface_hub") "Could not install/update huggingface_hub."
         $scriptsDirectory = (& python -c "import sysconfig; print(sysconfig.get_path('scripts', scheme='nt_user'))").Trim()
     }
-
     if ($scriptsDirectory -and (Test-Path $scriptsDirectory)) {
         $env:Path = "$scriptsDirectory;$env:Path"
     }
 
     if (-not (Get-Command hf -ErrorAction SilentlyContinue)) {
-        throw "The Hugging Face CLI was installed but 'hf' is not available on PATH. Add the Python user Scripts directory to PATH and rerun."
+        Write-Host "Installing the Hugging Face CLI..."
+        if ($pythonLauncher -eq "py") {
+            Invoke-Checked "py" @("-3", "-m", "pip", "install", "--user", "huggingface_hub") "Could not install huggingface_hub."
+        } else {
+            Invoke-Checked "python" @("-m", "pip", "install", "--user", "huggingface_hub") "Could not install huggingface_hub."
+        }
+        if ($scriptsDirectory -and (Test-Path $scriptsDirectory)) {
+            $env:Path = "$scriptsDirectory;$env:Path"
+        }
     }
 
+    if (-not (Get-Command hf -ErrorAction SilentlyContinue)) {
+        throw "The Hugging Face CLI was installed but 'hf' is not available on PATH. Add the Python user Scripts directory to PATH and rerun."
+    }
     Write-Host "Hugging Face CLI: available"
 }
 
