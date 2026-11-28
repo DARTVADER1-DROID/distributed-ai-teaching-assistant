@@ -19,7 +19,7 @@ if errorlevel 1 goto :missing_npm
 echo [INFO] Node.js:
 node --version
 echo [INFO] npm:
-npm --version
+call npm --version
 echo.
 
 REM Use the committed lockfile for reproducible installs.
