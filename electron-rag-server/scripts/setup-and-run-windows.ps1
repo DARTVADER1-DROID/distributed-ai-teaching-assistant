@@ -4,8 +4,6 @@ Set-StrictMode -Version Latest
 $PackageRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $PackageRoot
 
-$ModelId = "onnx-community/bge-m3-ONNX"
-$ModelRevision = "25b9af8e87a38eb120cfe87125383677b9cd309e"
 $RequiredModelFiles = @(
     "config.json",
     "tokenizer.json",
@@ -19,6 +17,22 @@ function Write-Step([string]$Message) {
     Write-Host ""
     Write-Host "==> $Message" -ForegroundColor Cyan
 }
+
+function Get-ConfigString([string]$PropertyName) {
+    $configFile = Join-Path $PackageRoot "config/config.ts"
+    $configText = Get-Content -LiteralPath $configFile -Raw
+    $pattern = 'public\s+' + [regex]::Escape($PropertyName) + '\s*=\s*"([^"]+)"'
+    $match = [regex]::Match($configText, $pattern)
+    if (-not $match.Success) {
+        throw "Could not read '$PropertyName' from config/config.ts."
+    }
+    return $match.Groups[1].Value
+}
+
+$TokenizerModelId = Get-ConfigString "tokenizer_model_id"
+$TokenizerModelRevision = Get-ConfigString "tokenizer_model_revision"
+$EmbeddingModelId = Get-ConfigString "embedding_model_id"
+$EmbeddingModelRevision = Get-ConfigString "embedding_model_revision"
 
 function Refresh-Path {
     $machinePath = [Environment]::GetEnvironmentVariable("Path", "Machine")
@@ -167,7 +181,7 @@ function Test-ModelFiles([string]$Directory) {
     return $true
 }
 
-function Ensure-ModelDirectory([string]$Directory) {
+function Ensure-ModelDirectory([string]$Directory, [string]$RepositoryId, [string]$Revision) {
     if (Test-ModelFiles $Directory) {
         Write-Host "Model files already present: $Directory"
         return
@@ -176,9 +190,9 @@ function Ensure-ModelDirectory([string]$Directory) {
     Write-Host "Model files are missing or incomplete. Downloading the pinned BGE-M3 snapshot..."
     New-Item -ItemType Directory -Force -Path $Directory | Out-Null
     $downloadArguments = @(
-        "download", $ModelId
+        "download", $RepositoryId
     ) + $RequiredModelFiles + @(
-        "--revision", $ModelRevision,
+        "--revision", $Revision,
         "--local-dir", $Directory
     )
     Invoke-Checked "hf" $downloadArguments "BGE-M3 model download failed. Check your internet connection and available disk space."
@@ -191,16 +205,18 @@ function Ensure-ModelDirectory([string]$Directory) {
 
 function Ensure-Models {
     Write-Step "Checking local BGE-M3 model files"
-    $modelRoot = if ($env:MODEL_DIRECTORY) { $env:MODEL_DIRECTORY } else { "./models" }
-    $tokenizerDirectory = if ($env:TOKENIZER_MODEL_DIRECTORY) { $env:TOKENIZER_MODEL_DIRECTORY } else { "bge-m3-onnx" }
-    $embeddingDirectory = if ($env:EMBEDDING_MODEL_DIRECTORY) { $env:EMBEDDING_MODEL_DIRECTORY } else { "bge-m3-onnx" }
+    $modelRoot = if ($env:MODEL_DIRECTORY) { $env:MODEL_DIRECTORY } else { Get-ConfigString "model_directory" }
+    $tokenizerDirectory = if ($env:TOKENIZER_MODEL_DIRECTORY) { $env:TOKENIZER_MODEL_DIRECTORY } else { Get-ConfigString "tokenizer_model_directory" }
+    $embeddingDirectory = if ($env:EMBEDDING_MODEL_DIRECTORY) { $env:EMBEDDING_MODEL_DIRECTORY } else { Get-ConfigString "embedding_model_directory" }
 
     $tokenizerPath = Resolve-ConfiguredPath $modelRoot $tokenizerDirectory
     $embeddingPath = Resolve-ConfiguredPath $modelRoot $embeddingDirectory
 
-    Ensure-ModelDirectory $tokenizerPath
+    Ensure-ModelDirectory $tokenizerPath $TokenizerModelId $TokenizerModelRevision
     if ($embeddingPath -ne $tokenizerPath) {
-        Ensure-ModelDirectory $embeddingPath
+        Ensure-ModelDirectory $embeddingPath $EmbeddingModelId $EmbeddingModelRevision
+    } elseif ($TokenizerModelId -ne $EmbeddingModelId -or $TokenizerModelRevision -ne $EmbeddingModelRevision) {
+        throw "Tokenizer and embedding model paths are identical, but config/config.ts specifies different model snapshots. Give them separate directories."
     }
 }
 
