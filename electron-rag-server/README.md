@@ -45,17 +45,13 @@ LanceDB repository integration and HTTP API tests.
 
 ## Local BGE-M3 model setup
 
-The server does not download model weights implicitly. Both the tokenizer and
-ONNX embedding model are loaded from local directories. The default directory
-layout is:
+The server does not download model weights implicitly. Tokenization and
+embedding use the **same pinned model snapshot**, so their tokenizer metadata
+cannot silently drift apart. The default directory layout is:
 
 ```text
 electron-rag-server/
 ├── models/
-│   ├── bge-m3-tokenizer/
-│   │   ├── tokenizer.json
-│   │   ├── tokenizer_config.json
-│   │   └── special_tokens_map.json
 │   └── bge-m3-onnx/
 │       ├── config.json
 │       ├── tokenizer.json
@@ -74,26 +70,19 @@ files; the RAG server itself runs on Node.js):
 python -m pip install -U huggingface_hub
 ```
 
-Download the tokenizer at the exact revision configured in
-`config/config.ts`:
-
-```bash
-hf download BAAI/bge-m3 tokenizer.json tokenizer_config.json special_tokens_map.json --revision b28ce2a6fcc9c75ef1c0619575d0ec19af760082 --local-dir ./models/bge-m3-tokenizer
-```
-
-Download only the default ONNX graph and its external tensor data, plus the
-configuration/tokenizer metadata, from the pinned ONNX export revision:
+Download the tokenizer metadata and ONNX graph from the exact immutable
+revision configured in `config/config.ts`:
 
 ```bash
 hf download onnx-community/bge-m3-ONNX config.json tokenizer.json tokenizer_config.json special_tokens_map.json onnx/model.onnx onnx/model.onnx_data --revision 25b9af8e87a38eb120cfe87125383677b9cd309e --local-dir ./models/bge-m3-onnx
 ```
 
-The ONNX external data file is large (multiple gigabytes). Ensure the download
-finishes completely; do not rename or separate `model.onnx` and
+The ONNX external tensor-data file is approximately 2.27 GB. Ensure the
+download finishes completely; do not rename or separate `model.onnx` and
 `model.onnx_data`. Transformers.js needs both files together.
 
-The default model paths and immutable source revisions are centralized in
-`config/config.ts`. The downloaded directories are ignored by Git.
+The default model paths and immutable source revision are centralized in
+`config/config.ts`. The downloaded directory is ignored by Git.
 
 ### Optional path overrides
 
@@ -102,7 +91,7 @@ Paths can be changed without editing source code:
 | Environment variable | Default | Purpose |
 | --- | --- | --- |
 | `MODEL_DIRECTORY` | `./models` | Root directory for local model folders |
-| `TOKENIZER_MODEL_DIRECTORY` | `bge-m3-tokenizer` | Tokenizer folder under the model root |
+| `TOKENIZER_MODEL_DIRECTORY` | `bge-m3-onnx` | Tokenizer folder under the model root |
 | `EMBEDDING_MODEL_DIRECTORY` | `bge-m3-onnx` | ONNX model folder under the model root |
 | `LANCEDB_URI` | `./data/lancedb` | Local LanceDB database directory |
 | `PORT` | `3000` | HTTP server port |
