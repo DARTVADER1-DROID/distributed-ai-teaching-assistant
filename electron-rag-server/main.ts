@@ -382,10 +382,13 @@ export function createApp(vdbManager: VdbManagerService): express.Express {
       if (typeof body?.query !== "string" || body.query.trim().length === 0) {
         throw new HttpInputError("Provide a non-empty 'query' string.");
       }
-      if (body.course_id !== undefined && typeof body.course_id !== "string") {
-        throw new HttpInputError("'course_id' must be a UUID string.");
+      if (body.course_id !== undefined &&
+        (typeof body.course_id !== "string" ||
+          !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(body.course_id))) {
+        throw new HttpInputError("'course_id' must be a valid UUID.");
       }
-      if (body.top_k !== undefined && typeof body.top_k !== "number") {
+      if (body.top_k !== undefined &&
+        (typeof body.top_k !== "number" || !Number.isSafeInteger(body.top_k) || body.top_k < 1 || body.top_k > 50)) {
         throw new HttpInputError("'top_k' must be an integer between 1 and 50.");
       }
 
