@@ -82,13 +82,10 @@ function Ensure-Node {
     if (-not (Test-SupportedNode $nodeVersion)) {
         Ensure-Winget
         Write-Host "Node.js $nodeVersion is outside the supported range. Installing/upgrading Node.js LTS..."
-        & winget upgrade --id OpenJS.NodeJS.LTS --exact --silent --accept-package-agreements --accept-source-agreements
-        if ($LASTEXITCODE -ne 0) {
-            Invoke-Checked "winget" @(
-                "install", "--id", "OpenJS.NodeJS.LTS", "--exact",
-                "--silent", "--accept-package-agreements", "--accept-source-agreements"
-            ) "Node.js LTS installation/upgrade failed."
-        }
+        Invoke-Checked "winget" @(
+            "install", "--id", "OpenJS.NodeJS.LTS", "--exact", "--force",
+            "--silent", "--accept-package-agreements", "--accept-source-agreements"
+        ) "Node.js LTS installation/upgrade failed."
         Refresh-Path
         $nodeVersion = (& node --version).Trim()
         if (-not (Test-SupportedNode $nodeVersion)) {
@@ -248,7 +245,7 @@ function Ensure-NpmDependencies {
 
     $dependenciesHealthy = $false
     if (Test-Path "node_modules") {
-        & npm ls --depth=0 *> $null
+        & npm ls --all *> $null
         $dependenciesHealthy = ($LASTEXITCODE -eq 0)
     }
 
@@ -280,8 +277,18 @@ function Start-Server {
     }
 
     $portNumber = 0
-    if ([int]::TryParse($port, [ref]$portNumber)) {
-        $portInUse = (Test-NetConnection -ComputerName "localhost" -Port $portNumber -WarningAction SilentlyContinue).TcpTestSucceeded
+    if ([int]::TryParse($port, [ref]$portNumber) -and $portNumber -ge 1 -and $portNumber -le 65535) {
+        $tcpClient = [System.Net.Sockets.TcpClient]::new()
+        $portInUse = $false
+        try {
+            $connectTask = $tcpClient.ConnectAsync("localhost", $portNumber)
+            $portInUse = $connectTask.Wait(1000) -and $tcpClient.Connected
+        } catch {
+            $portInUse = $false
+        } finally {
+            $tcpClient.Dispose()
+        }
+
         if ($portInUse) {
             throw "Port $portNumber is already in use, but the RAG health endpoint did not respond. Stop the other process or change PORT, then rerun."
         }
