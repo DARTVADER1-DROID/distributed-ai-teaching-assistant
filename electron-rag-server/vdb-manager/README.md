@@ -1,7 +1,6 @@
 # VDB Manager
 
-The VDB manager exposes course-level operations backed by embedded LanceDB.
-The provider-specific connection is isolated in `lance-db-client.ts`.
+The VDB manager exposes course lifecycle and semantic retrieval operations backed by embedded LanceDB. Provider-specific database access is isolated behind the repository and LanceDB table manager.
 
 ## Database connection
 
@@ -22,33 +21,48 @@ The provider-specific connection is isolated in `lance-db-client.ts`.
 - A different filename with different bytes is allowed.
 - SHA-256 detects byte-identical files, not visually or semantically identical PDFs re-exported with changed metadata.
 
-`CourseIdentityFactory` performs filename normalization, SHA-256 calculation, duplicate checks, and UUID assignment. It prepares identity metadata only; it does not run the PDF pipeline or persist a course.
+`CourseIdentityFactory` performs filename normalization, SHA-256 calculation, duplicate checks, and UUID assignment. The create/update workflow serializes writes within this server process so duplicate-check-to-persistence operations do not race locally.
 
-**Concurrency requirement:** LanceDB has no relational unique constraints or multi-table transaction for this workflow. The eventual `CreateCourse` implementation must serialize the entire duplicate-check-to-course-insert operation. A check alone is not an atomic reservation across multiple processes.
+## Course operations
 
-## Course contract
-
-- `Course` is the stored domain object and includes its generated ID, document name, SHA-256 hash, and complete `ExtractionResult`.
-- `CreateCourseRequest` contains the uploaded filename and bytes; it has no ID or caller-supplied hash.
-- Updating a course will replace its complete extracted material, not merge partial content.
-
-## Operations
-
-| Operation | File | Contract |
+| Operation | Service method | Behavior |
 | --- | --- | --- |
-| Create course | `create-course.ts` | Planned orchestration point for identity checks, processing, and persistence. |
-| Update course | `update-course.ts` | Replace all extracted material for the given ID. |
-| Delete course | `delete-course.ts` | Delete one course by ID. |
-| Retrieve course | `get-course.ts` | Return one course by ID, or null when absent. |
-| Show all courses | `get-all-courses.ts` | Return all stored courses. |
-| Delete all courses | `delete-all-courses.ts` | Remove all stored courses. |
+| Create course | `createCourse` | Runs PDF parsing, validation, hierarchical extraction, chunking, embedding and persistence. |
+| Replace course | `updateCourse` | Fully replaces a course while preserving its ID; identical filename and bytes are rejected as a no-op. |
+| Delete course | `deleteCourse` | Removes the catalogue record and associated chunks. |
+| Retrieve course | `getCourse` | Returns stored metadata and the parsed hierarchy, without loading the embedding model. |
+| List courses | `getAllCourses` | Returns all stored course records. |
+| Delete all courses | `deleteAllCourses` | Removes all catalogue records and associated chunks. |
+| Semantic retrieval | `searchCourses` | Embeds a natural-language query and returns the nearest active-generation chunks. |
 
-The PDF validator, extractor, chunker, and embedder are not wired into `CreateCourse` in this change.
+## Semantic retrieval
+
+The retrieval operation embeds the query using the same BGE-M3 ONNX model and embedding configuration used during ingestion. The embedding model is loaded lazily and shared between ingestion and query embedding.
+
+LanceDB performs cosine-distance vector search over the `course_chunks` table. The repository first reads the course catalogue and filters candidates by each course's `active_generation_id` and the query embedding model ID. This prevents superseded generations and incompatible embedding models from being returned.
+
+Search can cover all courses or be restricted to one course. `top_k` defaults to 5 and is limited to 1–50. Results include chunk content, heading path, token count, document name, source page/line range, and cosine distance (lower is closer). No match returns an empty results array.
+
+HTTP endpoint: `POST /api/retrieval/search`
+
+```json
+{
+  "query": "How are Laplace transforms used to solve differential equations?",
+  "course_id": "optional-course-uuid",
+  "top_k": 5
+}
+```
+
+Omit `course_id` to search across all courses. Omit `top_k` to use the default. The API validates query text, UUID and result limit.
 
 ## Physical LanceDB schemas
 
 `courses` stores course identity, normalized filename, SHA-256 fingerprint, complete serialized hierarchy, active chunk-generation ID, and timestamps.
 
-`course_chunks` stores one chunk, its dense vector, exact embedding input, source text, heading path, token count, source page/line range, and embedding model metadata. The vector column is a fixed-size list matching the embedding service's declared dimensions.
+`course_chunks` stores one chunk, its dense vector, exact embedding input, source text, heading path, token count, source page/line range, and embedding model metadata.
 
-`course-table-manager.ts` creates both empty tables when absent and validates existing schemas when opening them. It does not silently migrate existing tables. Existing local databases created with the previous catalogue schema must be recreated or explicitly migrated before use with this schema.
+`course-table-manager.ts` creates both empty tables when absent and validates existing schemas when opening them. It does not silently migrate existing tables. Existing local databases created with an incompatible catalogue or chunk schema must be recreated or explicitly migrated before use.
+
+## Transaction and generation behavior
+
+LanceDB does not provide a cross-table transaction for this workflow. Creation writes chunk rows before publishing the course catalogue row and compensates on failure. Replacement writes a new generation, switches the catalogue to it, then removes old generations. Retrieval always filters by the active generation recorded in the catalogue.
