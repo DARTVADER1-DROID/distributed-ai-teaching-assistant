@@ -7,6 +7,8 @@ import { RagConfig } from "../config/config.js";
 import { DocumentNodeType } from "../extractor/extractor-service.js";
 import { ValidationReport } from "../validator/font-size-validator.js";
 import type { CoursePipelineResult } from "./create-course.js";
+import { CreateCourse } from "./create-course.js";
+import { VdbManagerService } from "./vdb-manager-service.js";
 import { CourseRepository, CourseNotFoundError } from "./course-repository.js";
 import { CourseTableManager } from "./course-table-manager.js";
 
@@ -60,6 +62,7 @@ async function runCourseRepositoryTest(): Promise<void> {
   try {
     const tables = await new CourseTableManager(connection).ensureTables();
     const repository = new CourseRepository(tables.courses, tables.courseChunks);
+    const manager = new VdbManagerService({} as unknown as CreateCourse, repository);
     const id = "7a1a3a84-3fd7-4d75-a75d-6adca39b7f8d";
 
     await repository.create(pipelineResult(id, "first"));
@@ -80,14 +83,14 @@ async function runCourseRepositoryTest(): Promise<void> {
     assert.equal(activeRows.length, 1);
     assert.equal(activeRows[0]?.content, "body second");
 
-    assert.equal(await repository.delete(id), true);
+    assert.equal(await manager.deleteCourse(id), true);
     assert.equal(await repository.get(id), null);
-    assert.equal(await repository.delete(id), false);
+    assert.equal(await manager.deleteCourse(id), false);
     await assert.rejects(repository.replace(id, pipelineResult(id, "third")), CourseNotFoundError);
 
     await repository.create(pipelineResult(id, "fourth"));
-    assert.equal(await repository.deleteAll(), 1);
-    assert.equal(await repository.deleteAll(), 0);
+    assert.equal(await manager.deleteAllCourses(), 1);
+    assert.equal(await manager.deleteAllCourses(), 0);
     assert.equal((await repository.getAll()).length, 0);
     assert.equal((await tables.courseChunks.query().toArray()).length, 0);
 
