@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	"distributed-ai-teaching-assistant/teacher-robot/models"
+	"github.com/DARTVADER1-DROID/distributed-ai-teaching-assistant/teacher-robot/models"
 )
 
 var (
@@ -44,7 +44,10 @@ func (s *DataService) AddCourse(course models.Course) (models.Course, error) {
 		return models.Course{}, err
 	}
 
-	course.ID = newID("course")
+	course.ID, err = generateID("course")
+	if err != nil {
+		return models.Course{}, err
+	}
 	if err := assignTopicIDs(&course); err != nil {
 		return models.Course{}, err
 	}
@@ -52,8 +55,8 @@ func (s *DataService) AddCourse(course models.Course) (models.Course, error) {
 		return models.Course{}, err
 	}
 
-	s.courses = append(s.courses, course)
-	return course, nil
+	s.courses = append(s.courses, cloneCourse(course))
+	return cloneCourse(course), nil
 }
 
 func (s *DataService) UpdateCourse(courseID string, replacement models.Course) (models.Course, error) {
@@ -73,12 +76,13 @@ func (s *DataService) UpdateCourse(courseID string, replacement models.Course) (
 		return models.Course{}, err
 	}
 
-	s.courses[index] = replacement
-
 	// Replacing a course invalidates its old topic identities. If it is at
 	// or before the current position, restart teaching from that course.
 	if index <= s.currentCourseIndex {
-		for i := index; i < len(s.courses); i++ {
+		for _, topic := range s.courses[index].Topics {
+			delete(s.completedTopicIDs, topic.ID)
+		}
+		for i := index + 1; i < len(s.courses); i++ {
 			for _, topic := range s.courses[i].Topics {
 				delete(s.completedTopicIDs, topic.ID)
 			}
@@ -87,12 +91,15 @@ func (s *DataService) UpdateCourse(courseID string, replacement models.Course) (
 		s.currentTopicIndex = 0
 	}
 
-	return replacement, nil
+	s.courses[index] = cloneCourse(replacement)
+	return cloneCourse(replacement), nil
 }
 
 func (s *DataService) ShowAllCourses() []models.Course {
 	courses := make([]models.Course, len(s.courses))
-	copy(courses, s.courses)
+	for i, course := range s.courses {
+		courses[i] = cloneCourse(course)
+	}
 	return courses
 }
 
@@ -104,6 +111,9 @@ func (s *DataService) DeleteAllCourses() {
 }
 
 func (s *DataService) GetCurrentProgress() (TeachingProgress, error) {
+	if len(s.courses) == 0 {
+		return TeachingProgress{}, ErrNoCurrentTopic
+	}
 	if s.currentCourseIndex >= len(s.courses) {
 		return s.completedProgress(), nil
 	}
@@ -152,8 +162,8 @@ func (s *DataService) progressFor(course models.Course, topic models.Topic) Teac
 	}
 
 	return TeachingProgress{
-		Course:          course,
-		Topic:           topic,
+		Course:          cloneCourse(course),
+		Topic:           cloneTopic(topic),
 		TopicID:         topic.ID,
 		Progress:        progress,
 		CompletedTopics: completed,
@@ -163,9 +173,13 @@ func (s *DataService) progressFor(course models.Course, topic models.Topic) Teac
 
 func (s *DataService) completedProgress() TeachingProgress {
 	completed, total := s.topicCounts()
+	progress := 0.0
+	if total > 0 {
+		progress = 100
+	}
 	return TeachingProgress{
-		Progress:        100,
-		Completed:       true,
+		Progress:        progress,
+		Completed:       total > 0,
 		CompletedTopics: completed,
 		TotalTopics:     total,
 	}
@@ -247,12 +261,19 @@ func assignTopicIDs(course *models.Course) error {
 	return nil
 }
 
-func newID(prefix string) string {
-	id, err := generateID(prefix)
-	if err != nil {
-		panic(fmt.Errorf("generate %s ID: %w", prefix, err))
+func cloneCourse(course models.Course) models.Course {
+	clone := course
+	clone.Topics = make([]models.Topic, len(course.Topics))
+	for i, topic := range course.Topics {
+		clone.Topics[i] = cloneTopic(topic)
 	}
-	return id
+	return clone
+}
+
+func cloneTopic(topic models.Topic) models.Topic {
+	clone := topic
+	clone.Content.Paragraphs = append([]string(nil), topic.Content.Paragraphs...)
+	return clone
 }
 
 func generateID(prefix string) (string, error) {
