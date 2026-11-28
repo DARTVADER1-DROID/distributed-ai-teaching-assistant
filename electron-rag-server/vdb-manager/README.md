@@ -45,7 +45,21 @@ Course operation bodies remain intentionally unimplemented. The persisted record
   between the domain extraction type and the persisted JSON representation
   explicit.
 
-These are TypeScript contracts, not a verified physical LanceDB schema yet.
-Embedding generation is not integrated or runtime-verified, and no vectors
-are written by this change. The next step is to validate the record types
-against the installed LanceDB SDK and then implement table creation.
+## Physical LanceDB schemas
+
+`course-table-schemas.ts` defines explicit Apache Arrow schemas for both tables.
+The `course_chunks.vector` column is a fixed-size list of 1024 Float32 values,
+matching the current BGE-M3 embedding service contract. All chunk provenance
+fields use the exact names from `DocumentChunk`.
+
+`course-table-manager.ts` creates the two empty tables when absent and opens
+them when already present. It checks existing column names and Arrow types
+before returning handles; it does not overwrite or silently migrate existing
+tables. The manager caches its initialization promise so concurrent callers
+share one initialization attempt.
+
+The LanceDB SDK `0.41.0` declares Apache Arrow as a peer dependency. The server
+now pins `apache-arrow` to `21.2.0`, matching the SDK's own development version.
+
+Embedding generation is not yet integrated or runtime-verified. The physical
+vector column is defined, but this change does not write or index vectors.
