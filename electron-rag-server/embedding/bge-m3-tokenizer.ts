@@ -1,13 +1,11 @@
 import { AutoTokenizer } from "@huggingface/transformers";
+import { RagConfig } from "../config/config.js";
 
 /**
  * BGE-M3 uses the XLM-RoBERTa tokenizer published with the model.
- * Keep the tokenizer revision pinned so chunk boundaries are reproducible.
+ * Its source repository and immutable revision are recorded in RagConfig.
  */
 export class BgeM3Tokenizer {
-  public static readonly modelId = "BAAI/bge-m3";
-  public static readonly revision =
-    "b28ce2a6fcc9c75ef1c0619575d0ec19af760082";
   public static readonly modelMaxSequenceLength = 8192;
 
   private constructor(
@@ -16,12 +14,21 @@ export class BgeM3Tokenizer {
     >,
   ) {}
 
-  public static async load(): Promise<BgeM3Tokenizer> {
-    const tokenizer = await AutoTokenizer.from_pretrained(
-      BgeM3Tokenizer.modelId,
-      { revision: BgeM3Tokenizer.revision },
-    );
-    return new BgeM3Tokenizer(tokenizer);
+  public static async load(
+    config: RagConfig = new RagConfig(),
+  ): Promise<BgeM3Tokenizer> {
+    const modelPath = config.getTokenizerModelPath();
+    try {
+      const tokenizer = await AutoTokenizer.from_pretrained(modelPath, {
+        local_files_only: true,
+      });
+      return new BgeM3Tokenizer(tokenizer);
+    } catch (error) {
+      throw new Error(
+        `Unable to load the local BGE-M3 tokenizer from "${modelPath}". Download the tokenizer files using the revision configured in config/config.ts. Remote model downloads are disabled.`,
+        { cause: error },
+      );
+    }
   }
 
   /**
