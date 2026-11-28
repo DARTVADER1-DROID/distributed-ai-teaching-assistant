@@ -6,13 +6,15 @@
   "description": "Electron-based RAG server",
   "scripts": {
     "dev": "tsx watch main.ts",
-    "build": "tsc -p tsconfig.json && npm run test:schema && npm run test:duplicates && npm run test:pipeline && npm run test:repository && npm run test:api",
+    "build": "tsc -p tsconfig.json && npm test",
     "test:schema": "tsx vdb-manager/course-table-schema.test.ts",
     "test:duplicates": "tsx vdb-manager/course-duplicate-checker.test.ts",
     "test:pipeline": "tsx vdb-manager/create-course.test.ts",
     "test:repository": "tsx vdb-manager/course-repository.test.ts",
     "start": "node dist/main.js",
-    "test:api": "tsx api-routes.test.ts"
+    "test:api": "tsx api-routes.test.ts",
+    "test:pdf": "tsx pdf/pdfjs-document-parser.test.ts",
+    "test": "npm run test:schema && npm run test:duplicates && npm run test:pipeline && npm run test:pdf && npm run test:repository && npm run test:api"
   },
   "dependencies": {
     "@huggingface/transformers": "4.3.2",
@@ -30,5 +32,8 @@
     "@types/swagger-ui-express": "^4.1.8",
     "tsx": "^4.20.5",
     "typescript": "^5.9.2"
+  },
+  "engines": {
+    "node": ">=22.13.0"
   }
 }
