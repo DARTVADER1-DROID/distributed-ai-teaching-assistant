@@ -19,7 +19,8 @@
     "extractor/**/*.ts",
     "chunker/**/*.ts",
     "embedding/**/*.ts",
-    "vdb-manager/**/*.ts"
+    "vdb-manager/**/*.ts",
+    "api-routes.test.ts"
   ],
   "exclude": [
     "node_modules",
