@@ -20,6 +20,8 @@ function coursePredicate(courseId: string): string {
 /**
  * Persistence boundary for the catalogue and chunk tables.
  * New chunk generations are written before the catalogue switches to them.
+ * LanceDB does not provide a cross-table transaction, so replacement uses
+ * compensating cleanup and rollback rather than claiming atomicity.
  */
 export class CourseRepository {
   public constructor(
@@ -53,7 +55,7 @@ export class CourseRepository {
     }
   }
 
-  /** Atomically switches the catalogue pointer after the replacement chunks are present. */
+  /** Switches the catalogue to a prepared generation, then removes inactive chunks. */
   public async replace(
     courseId: string,
     result: CoursePipelineResult,
@@ -78,8 +80,8 @@ export class CourseRepository {
     };
 
     try {
-      // LanceDB's update expression API treats string values as SQL expressions.
       // Replacing the catalogue row via delete/add preserves JSON strings verbatim.
+      // This is a compensated two-step write, not an atomic catalogue transaction.
       await this.courses.delete(coursePredicate(courseId));
       await this.courses.add([updatedRecord]);
     } catch (error) {
