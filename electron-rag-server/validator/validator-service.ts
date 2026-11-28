@@ -4,8 +4,8 @@
  * Mirrors the validation-stage orchestration in
  * rag-server/validator/validator_service.cpp.
  *
- * PDF parsing/extraction is deliberately not implemented here yet. This
- * service receives ExtractedPdfData from the future TypeScript PDF extractor.
+ * PDF.js parsing is handled by PdfJsDocumentParser before this service is
+ * called. This coordinator validates the parser's normalized PDF data.
  */
 
 import { RagConfig } from "../config/config.js";
