@@ -34,7 +34,7 @@ const openApiDocument = {
   servers: [{ url: "/" }],
   tags: [
     { name: "Health", description: "Service availability." },
-    { name: "Courses", description: "Create PDF-backed courses and list the stored course catalogue." },
+    { name: "Courses", description: "Create, list and delete PDF-backed courses and manage the stored course catalogue." },
   ],
   components: {
     schemas: {
@@ -94,6 +94,22 @@ const openApiDocument = {
             maxItems: 1024,
             description: "The complete vector generated for the first chunk, useful for inspecting the embedding output.",
           },
+        },
+      },
+      DeleteCourseResult: {
+        type: "object",
+        required: ["deleted", "course_id"],
+        properties: {
+          deleted: { type: "boolean", const: true },
+          course_id: { type: "string", format: "uuid" },
+        },
+      },
+      DeleteAllCoursesResult: {
+        type: "object",
+        required: ["deleted", "deleted_count"],
+        properties: {
+          deleted: { type: "boolean", const: true },
+          deleted_count: { type: "integer", minimum: 0 },
         },
       },
       CourseProcessingResult: {
@@ -175,6 +191,43 @@ const openApiDocument = {
           },
         },
       },
+      delete: {
+        tags: ["Courses"],
+        summary: "Delete all courses",
+        description: "Permanently removes every course catalogue entry and its associated vector chunks.",
+        operationId: "deleteAllCourses",
+        responses: {
+          "200": {
+            description: "All courses and associated vector chunks were deleted.",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/DeleteAllCoursesResult" } } },
+          },
+          "500": { description: "Deletion failed.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+        },
+      },
+    },
+    "/api/courses/{courseId}": {
+      parameters: [{
+        name: "courseId",
+        in: "path",
+        required: true,
+        description: "UUID of the course to delete.",
+        schema: { type: "string", format: "uuid" },
+      }],
+      delete: {
+        tags: ["Courses"],
+        summary: "Delete one course",
+        description: "Permanently removes the course and all associated vector chunks.",
+        operationId: "deleteCourse",
+        responses: {
+          "200": {
+            description: "Course and associated vector chunks were deleted.",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/DeleteCourseResult" } } },
+          },
+          "400": { description: "Course ID is not a valid UUID.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          "404": { description: "Course does not exist.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          "500": { description: "Deletion failed.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+        },
+      },
     },
   },
 };
@@ -229,6 +282,31 @@ function installRoutes(vdbManager: VdbManagerService): void {
   app.get("/api/courses", async (_request, response, next) => {
     try { response.status(200).json(await vdbManager.getAllCourses()); }
     catch (error) { next(error); }
+  });
+
+  app.delete("/api/courses/:courseId", async (request, response, next) => {
+    try {
+      const courseId = request.params.courseId;
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(courseId)) {
+        response.status(400).json({ error: "Course ID must be a valid UUID." });
+        return;
+      }
+
+      const deleted = await vdbManager.deleteCourse(courseId);
+      if (!deleted) {
+        response.status(404).json({ error: `Course '${courseId}' was not found.` });
+        return;
+      }
+
+      response.status(200).json({ deleted: true, course_id: courseId });
+    } catch (error) { next(error); }
+  });
+
+  app.delete("/api/courses", async (_request, response, next) => {
+    try {
+      const deletedCount = await vdbManager.deleteAllCourses();
+      response.status(200).json({ deleted: true, deleted_count: deletedCount });
+    } catch (error) { next(error); }
   });
 
   const errorHandler: ErrorRequestHandler = (error, _request, response, _next) => {
