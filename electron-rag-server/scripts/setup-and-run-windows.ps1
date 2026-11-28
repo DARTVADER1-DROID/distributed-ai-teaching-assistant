@@ -173,10 +173,28 @@ function Resolve-ConfiguredPath([string]$Root, [string]$Child) {
 }
 
 function Test-ModelFiles([string]$Directory) {
+    # These lower bounds catch interrupted or placeholder downloads. The
+    # pinned repository's tokenizer and ONNX external-data files are large.
+    $minimumSizes = @{
+        "tokenizer.json" = 10MB
+        "onnx/model.onnx" = 100KB
+        "onnx/model.onnx_data" = 2GB
+    }
+
     foreach ($relativeFile in $RequiredModelFiles) {
         $filePath = Join-Path $Directory ($relativeFile -replace '/', [IO.Path]::DirectorySeparatorChar)
         if (-not (Test-Path -LiteralPath $filePath -PathType Leaf)) { return $false }
-        if ((Get-Item -LiteralPath $filePath).Length -le 0) { return $false }
+
+        $file = Get-Item -LiteralPath $filePath
+        $minimumSize = if ($minimumSizes.ContainsKey($relativeFile)) {
+            [long]$minimumSizes[$relativeFile]
+        } else {
+            1L
+        }
+        if ($file.Length -lt $minimumSize) {
+            Write-Warning "Model file is missing or unexpectedly small: $filePath ($($file.Length) bytes; expected at least $minimumSize bytes)."
+            return $false
+        }
     }
     return $true
 }
