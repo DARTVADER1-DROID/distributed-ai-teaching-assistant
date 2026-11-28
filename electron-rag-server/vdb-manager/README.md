@@ -1,7 +1,17 @@
 # VDB Manager
 
-The VDB manager exposes course-level operations. Each operation has its own
-file so its storage behavior can be implemented and tested independently.
+The VDB manager exposes course-level operations backed by LanceDB. The
+provider-specific connection is isolated in `lance-db-client.ts`; course
+operations will use that client rather than importing the SDK directly.
+
+## Database connection
+
+- SDK: `@lancedb/lancedb` (pinned to `0.41.0`).
+- Default local database URI: `./data/lancedb`.
+- Override the URI with the `LANCEDB_URI` environment variable.
+- The client lazily opens one connection and shares it across operations.
+- LanceDB's embedded mode stores its data in the configured local directory;
+  it does not require a separate database server.
 
 ## Course contract
 
@@ -24,5 +34,7 @@ file so its storage behavior can be implemented and tested independently.
 | Show all courses | `get-all-courses.ts` | Return all stored courses. |
 | Delete all courses | `delete-all-courses.ts` | Remove all stored courses. |
 
-All operation bodies currently throw a not-implemented error. No vector
-database provider, persistence format, or storage behavior has been selected.
+Course operation bodies remain intentionally unimplemented. The next step is
+to define and test the persisted chunk/vector record schema before wiring
+course CRUD to LanceDB. Embedding generation is not yet integrated into the
+pipeline, so no vectors are written by this change.

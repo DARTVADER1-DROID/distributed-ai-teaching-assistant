@@ -10,11 +10,12 @@
     "start": "node dist/main.js"
   },
   "dependencies": {
+    "@huggingface/transformers": "4.3.2",
+    "@lancedb/lancedb": "0.41.0",
     "express": "^5.1.0",
     "multer": "^2.0.2",
     "pdfjs-dist": "6.5.438",
-    "swagger-ui-express": "^5.0.1",
-    "@huggingface/transformers": "4.3.2"
+    "swagger-ui-express": "^5.0.1"
   },
   "devDependencies": {
     "@types/express": "^5.0.3",
